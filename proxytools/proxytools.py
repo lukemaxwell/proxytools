@@ -10,8 +10,12 @@ except ImportError:
     from html.parser import HTMLParser
     from urllib.parse import urljoin, urldefrag, urlencode, urlparse, urlunparse, parse_qsl
 
-from tornado import httpclient, gen, ioloop, queues, process
+from tornado import httpclient, gen, ioloop, queues
+
 from parser import GoogleParser, ProxyParser, PingParser
+from ping import ping_proxies
+from tcp import tcp_connections
+
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:17.0) Gecko/20100101 Firefox/17.0;',
@@ -21,8 +25,9 @@ HEADERS = {
 }
 CONNECT_TIMEOUT = 10
 PING_TIMEOUT = 1
+CONNECT_TIMEOUT = 2
+TCP_TIMEOUT = 2
 CONCURRENCY = 100
-STREAM = process.Subprocess.STREAM
 
 httpclient.AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
@@ -40,37 +45,6 @@ def on_timeout():
     # IOLoop.instance().stop()
     ioloop.IOLoop.current().stop()
 
-
-@gen.coroutine
-def call_subprocess(cmd, stdin_data=None, stdin_async=False):
-    """
-    Wrapper around subprocess call using Tornado's Subprocess class.
-    """
-    stdin = STREAM if stdin_async else subprocess.PIPE
-
-    sub_process = process.Subprocess(
-        cmd, stdin=stdin, stdout=STREAM, stderr=STREAM
-    )
-
-
-    if stdin_data:
-
-        stdin_data = bytes(stdin_data, 'utf-8')
-        if stdin_async:
-            yield gen.Task(sub_process.stdin.write, stdin_data)
-        else:
-            print('yeah, here')
-            sub_process.stdin.write(stdin_data)
-
-    if stdin_async or stdin_data:
-        sub_process.stdin.close()
-
-    result, error = yield [
-        gen.Task(sub_process.stdout.read_until_close),
-        gen.Task(sub_process.stderr.read_until_close)
-    ]
-
-    raise gen.Return((result, error))
 
 
 @gen.coroutine
@@ -236,77 +210,6 @@ def get_proxies_from_urls(urls, output_file=None):
         with open(output_file, 'w+') as f:
             f.write('\n'.join(all_proxies))
 
-@gen.coroutine
-def ping_proxies(proxies, output_file=None, timeout=PING_TIMEOUT, concurrency=CONCURRENCY, progress_bar=None):
-    parser = PingParser()
-    q = queues.Queue()
-    start = time.time()
-    fetching, fetched = set(), set()
-    working_proxies = set()
-
-    @gen.coroutine
-    def ping_proxy():
-        current_proxy = yield q.get()
-        try:
-            if current_proxy in fetching:
-                return
-
-            proxy_parts = current_proxy.split(':')
-            proxy_host = proxy_parts[0]
-
-            if len(proxy_parts) == 2:
-                proxy_port = proxy_parts[1]
-            else:
-                proxy_port = 80
-
-            #print('checking %s:%s' % (proxy_host, proxy_port))
-            fetching.add(current_proxy)
-            ping_cmd = [
-                'ping',
-                '-q',
-                '-w',
-                '{}'.format(timeout),
-                '-p',
-                '{}'.format(proxy_port),
-                '{}'.format(proxy_host)
-            ]
-            try:
-                result, error = yield call_subprocess(ping_cmd, stdin_async=True)
-                parsed_result = parser.parse(result.decode('utf-8'))
-                if 'lost' in parsed_result:
-                    if parsed_result['lost'] == 0:
-                        #print('OK')
-                        working_proxies.add(current_proxy)
-            except httpclient.HTTPError as e:
-                print(e)
-
-            fetched.add(current_proxy)
-            print(len(fetched))
-            if progress_bar:
-                progress_bar.update(len(fetched))
-
-        finally:
-            q.task_done()
-
-    @gen.coroutine
-    def worker():
-        while True:
-            yield ping_proxy()
-
-    for proxy in proxies:
-        q.put(proxy)
-
-    # Start workers, then wait for the work queue to be empty.
-    for _ in range(concurrency):
-        worker()
-    yield q.join(timeout=timedelta(seconds=300))
-    assert fetching == fetched
-    print('Done in %d seconds, tested %s proxies. Discarded %s proxies.' % (
-        time.time() - start, len(fetched), len(proxies) - len(working_proxies)))
-
-    if output_file is not None:
-        with open(output_file, 'w+') as f:
-            f.write('\n'.join(working_proxies))
 
 
 @gen.coroutine
@@ -314,7 +217,7 @@ def test_proxies_with_url(proxies, url, output_file=None):
     q = queues.Queue()
     start = time.time()
     fetching, fetched = set(), set()
-    all_proxies = set()
+    working_proxies = set()
 
     @gen.coroutine
     def test_proxy():
@@ -327,7 +230,7 @@ def test_proxies_with_url(proxies, url, output_file=None):
             proxy_host = 'http://{}'.format(proxy_parts[0])
 
             if len(proxy_parts) == 2:
-                proxy_port = proxy_parts[1]
+                proxy_port = int(proxy_parts[1])
             else:
                 proxy_port = 80
 
@@ -338,10 +241,9 @@ def test_proxies_with_url(proxies, url, output_file=None):
                                                                     headers=HEADERS,
                                                                     proxy_host=proxy_host,
                                                                     proxy_port=proxy_port,
-                                                                    connect_timeout_timeout=2,
                                                                     request_timeout=5,
                                                                     validate_cert=False )
-                all_proxies.add(current_proxy)
+                working_proxies.add(current_proxy)
                 print('{} OK'.format(current_proxy))
             except httpclient.HTTPError as e:
                 print(e)
@@ -364,12 +266,13 @@ def test_proxies_with_url(proxies, url, output_file=None):
         worker()
     yield q.join(timeout=timedelta(seconds=300))
     assert fetching == fetched
-    print('Done in %d seconds, fetched %s URLs. Discarded %s proxies.' % (
-        time.time() - start, len(fetched), len(proxies) - len(all_proxies)))
+    print('Done in %d seconds, fetched %s URLs. Found %s proxies, discarded %s proxies.' % (
+        time.time() - start, len(fetched), len(working_proxies), len(proxies) - len(working_proxies)))
 
     if output_file is not None:
         with open(output_file, 'w+') as f:
-            f.write('\n'.join(all_proxies))
+            f.write('\n'.join(working_proxies))
+
 
 
 @gen.coroutine
@@ -395,18 +298,18 @@ def get_sources(output):
 
 
 @cli.command()
-@click.argument('input', type=click.Path())
-@click.argument('output', type=click.Path())
-def test_proxies_with_url(input, output):
+@click.argument('input_file', type=click.Path())
+@click.argument('output_file', type=click.Path())
+@click.argument('url', type=click.STRING)
+def url_test(input_file, output_file, url):
     '''
     Test proxies are working.
     '''
-    with open(input) as f:
+    with open(input_file) as f:
         proxies = f.read().splitlines()
 
-    url = 'http://codepunk.xyz'
     io_loop = ioloop.IOLoop.current()
-    io_loop.run_sync(lambda: test_proxies_with_url(proxies, url, output))
+    io_loop.run_sync(lambda: test_proxies_with_url(proxies, url, output_file))
 
 @cli.command()
 @click.option('--timeout',
@@ -419,28 +322,52 @@ def test_proxies_with_url(input, output):
               type=click.INT,
               default=CONCURRENCY,
               help="concurrent ping requests (default: {})".format(CONCURRENCY))
-@click.argument('input', type=click.Path())
-@click.argument('output', type=click.Path())
-def test_proxies_with_ping(input, output, timeout, concurrency):
+@click.argument('input_file', type=click.Path())
+@click.argument('output_file', type=click.Path())
+def ping(input_file, output_file, timeout, concurrency):
     '''
     Ping proxy servers.
     '''
-    with open(input) as f:
+    with open(input_file) as f:
         proxies = f.read().splitlines()
 
-    #with click.progressbar(length=len(proxies),
-    #                   label='Pinging proxies') as bar:
-    #    io_loop = ioloop.IOLoop.current()
-    #    io_loop.run_sync(lambda: ping_proxies(proxies=proxies,
-    #                                        output_file=output,
-    #                                        concurrency=concurrency,
-    #                                        timeout=timeout,
-    #                                        progress_bar=bar))
+    bar = click.progressbar(length=len(proxies), label='Pinging proxies')
     io_loop = ioloop.IOLoop.current()
     io_loop.run_sync(lambda: ping_proxies(proxies=proxies,
-                                        output_file=output,
+                                        output_file=output_file,
                                         concurrency=concurrency,
-                                        timeout=timeout))
+                                        timeout=timeout,
+                                        progress_bar=bar))
+    bar.finish()
+
+@cli.command()
+@click.option('--timeout',
+              '-t',
+              type=click.INT,
+              default=CONNECT_TIMEOUT,
+              help="tcp connect timout (default: {})".format(CONNECT_TIMEOUT))
+@click.option('--concurrency',
+              '-c',
+              type=click.INT,
+              default=CONCURRENCY,
+              help="concurrent ping requests (default: {})".format(CONCURRENCY))
+@click.argument('input_file', type=click.Path())
+@click.argument('output_file', type=click.Path())
+def connect(input_file, output_file, timeout, concurrency):
+    '''
+    Test proxy port connections.
+    '''
+    with open(input_file) as f:
+        proxies = f.read().splitlines()
+
+    bar = click.progressbar(length=len(proxies), label='Testing ports')
+    io_loop = ioloop.IOLoop.current()
+    io_loop.run_sync(lambda: tcp_connections(proxies=proxies,
+                                        output_file=output_file,
+                                        concurrency=concurrency,
+                                        progress_bar=bar))
+    bar.finish()
+
 
 
 @cli.command()
