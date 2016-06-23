@@ -11,6 +11,7 @@ Installation
    apt-get update
 
 .. code-block:: console 
+
    apt-get install -y curl python-dev libcurl3-openssl-dev \
                       libxml2-dev libxslt1-dev \
                       zlib1g-dev libffi-dev libssl-dev
