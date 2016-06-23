@@ -1,13 +1,16 @@
-import time
-from datetime import timedelta
+# -*- coding: utf-8 -*-
 import click
+from datetime import timedelta
 import subprocess
+import time
 from tornado import gen, ioloop, queues, process
-from parser import PingParser
+
+from .parser import PingParser
 
 PING_TIMEOUT = 1
 CONCURRENCY = 100
 STREAM = process.Subprocess.STREAM
+
 
 class PingError(Exception):
     """
@@ -15,6 +18,7 @@ class PingError(Exception):
     """
     def __init__(self, message):
         self.message = message
+
 
 @gen.coroutine
 def call_subprocess(cmd, stdin_data=None, stdin_async=False):
@@ -45,6 +49,7 @@ def call_subprocess(cmd, stdin_data=None, stdin_async=False):
     ]
 
     raise gen.Return((result, error))
+
 
 @gen.coroutine
 def ping_proxies(proxies,

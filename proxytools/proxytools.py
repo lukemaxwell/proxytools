@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import time
 from datetime import timedelta
 import click
@@ -12,9 +14,9 @@ except ImportError:
 
 from tornado import httpclient, gen, ioloop, queues
 
-from parser import GoogleParser, ProxyParser, PingParser
-from ping import ping_proxies
-from tcp import tcp_connections
+from .parser import GoogleParser, ProxyParser, PingParser
+from .ping import ping_proxies
+from .tcp import tcp_connections
 
 
 HEADERS = {
@@ -44,7 +46,6 @@ def on_timeout():
     print("timeout")
     # IOLoop.instance().stop()
     ioloop.IOLoop.current().stop()
-
 
 
 @gen.coroutine
@@ -149,6 +150,7 @@ def get_links(html):
     url_seeker.feed(html)
     return url_seeker.urls
 
+
 def get_google_result_links(html):
     class URLSeeker(HTMLParser):
         def __init__(self):
@@ -163,6 +165,7 @@ def get_google_result_links(html):
     url_seeker = URLSeeker()
     url_seeker.feed(html)
     return url_seeker.urls
+
 
 @gen.coroutine
 def get_proxies_from_urls(urls, output_file=None):
@@ -209,7 +212,6 @@ def get_proxies_from_urls(urls, output_file=None):
     if output_file is not None:
         with open(output_file, 'w+') as f:
             f.write('\n'.join(all_proxies))
-
 
 
 @gen.coroutine
@@ -274,7 +276,6 @@ def test_proxies_with_url(proxies, url, output_file=None):
             f.write('\n'.join(working_proxies))
 
 
-
 @gen.coroutine
 def google_search_proxies(output):
     query = '+":8080" +":3128" +":80" filetype:txt'
@@ -287,11 +288,12 @@ def google_search_proxies(output):
 def cli():
     pass
 
+
 @cli.command()
 @click.argument('output', type=click.Path())
-def get_sources(output):
+def search_proxy_sources(output):
     '''
-    Get links to proxy files from Google.
+    Find web pages containing proxies.
     '''
     io_loop = ioloop.IOLoop.current()
     io_loop.run_sync(lambda: google_search_proxies(output))
@@ -310,6 +312,7 @@ def url_test(input_file, output_file, url):
 
     io_loop = ioloop.IOLoop.current()
     io_loop.run_sync(lambda: test_proxies_with_url(proxies, url, output_file))
+
 
 @cli.command()
 @click.option('--timeout',
@@ -340,6 +343,7 @@ def ping(input_file, output_file, timeout, concurrency):
                                         progress_bar=bar))
     bar.finish()
 
+
 @cli.command()
 @click.option('--timeout',
               '-t',
@@ -369,7 +373,6 @@ def connect(input_file, output_file, timeout, concurrency):
     bar.finish()
 
 
-
 @cli.command()
 @click.option('--input',
               '-i',
@@ -377,9 +380,9 @@ def connect(input_file, output_file, timeout, concurrency):
               help="file containing a list of urls")
 @click.argument('output', type=click.Path())
 @click.option('--url', '-u', type=click.STRING)
-def get_proxies(input, url, output):
+def scrape_proxies(input, url, output):
     '''
-    Search URLs for proxies.
+    Scrape proxies from URL.
     '''
     if input is not None:
         with open(input) as f:
@@ -396,7 +399,3 @@ if __name__ == '__main__':
     import logging
     logging.basicConfig()
     cli()
-
-
-
-

@@ -1,5 +1,7 @@
+# -*- coding: utf-8 -*-
 import re
 from lxml import html as ht
+
 
 class ParseException(Exception):
     ''' Represents a user-facing exception. '''
