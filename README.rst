@@ -6,7 +6,7 @@ A command line tool for finding and testing public web proxies.
 
 Installation
 ^^^^^^^^^^^^
-.. code-block:: bash 
+.. code-block:: console 
 
    apt-get update
    apt-get install -y curl python-dev libcurl3-openssl-dev \
