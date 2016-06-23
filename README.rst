@@ -21,6 +21,7 @@ Installation
    export PYCURL_SSL_LIBRARY=openssl
 
 .. code-block:: console 
+
    git clone https://github.com/lukemaxwell/proxytools.git
    cd proxytools
    python setup.py install
