@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import time
-from datetime import timedelta
 import click
+from datetime import timedelta
 import subprocess
+import sys
+import time
+from tornado import httpclient, gen, ioloop, queues
 
 try:
     from HTMLParser import HTMLParser
@@ -12,7 +14,6 @@ except ImportError:
     from html.parser import HTMLParser
     from urllib.parse import urljoin, urldefrag, urlencode, urlparse, urlunparse, parse_qsl
 
-from tornado import httpclient, gen, ioloop, queues
 
 from .parser import GoogleParser, ProxyParser, PingParser
 from .ping import ping_proxies
@@ -284,7 +285,8 @@ def google_search_proxies(output):
         f.write('\n'.join(urls))
 
 
-@click.group()
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+@click.group(context_settings=CONTEXT_SETTINGS)
 def cli():
     pass
 
@@ -374,26 +376,30 @@ def connect(input_file, output_file, timeout, concurrency):
 
 
 @cli.command()
-@click.option('--input',
+@click.option('--in-file',
               '-i',
               type=click.Path(exists=True),
               help="file containing a list of urls")
-@click.argument('output', type=click.Path())
+@click.argument('out-file', type=click.Path())
 @click.option('--url', '-u', type=click.STRING)
-def scrape_proxies(input, url, output):
+@click.pass_context
+def scrape_proxies(ctx, in_file, url, out_file):
     '''
-    Scrape proxies from URL.
+    Scrape proxies from URLs.
     '''
-    if input is not None:
-        with open(input) as f:
+    urls = []
+    if in_file is not None:
+        with open(in_file) as f:
             urls = f.read().splitlines()
     elif url is not None:
         urls = [url]
     else:
-        cli.get_proxies.get_help()
+        click.echo(ctx.get_help())
+        raise click.exceptions.UsageError('supply --in-file or --url', ctx)
 
-    io_loop = ioloop.IOLoop.current()
-    io_loop.run_sync(lambda: get_proxies_from_urls(urls, output))
+    if urls:
+        io_loop = ioloop.IOLoop.current()
+        io_loop.run_sync(lambda: get_proxies_from_urls(urls, out_file))
 
 if __name__ == '__main__':
     import logging

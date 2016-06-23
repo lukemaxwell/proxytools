@@ -27,6 +27,7 @@ setup(
         'lxml>=3.6.0',
         'pycurl>=7.43.0',
         'tornado>=4.3',
+        'colorama>=0.3.7',
     ],
     # packages=find_packages(exclude=('tests', 'docs'))
 )

@@ -1,12 +1,42 @@
 # -*- coding: utf-8 -*-
-import time
 from datetime import timedelta
-from tornado import tcpclient, gen, ioloop, queues, process, netutil
+import time
+from tornado import (tcpclient, gen, ioloop,
+                     queues, process, netutil)
 
 TCP_TIMEOUT = 2
 CONCURRENCY = 100
 
 netutil.Resolver.configure('tornado.netutil.ThreadedResolver')
+
+def host_and_port_from_string(destination):
+    '''
+    Parse host and port from string.
+    Return tuple (host, port).
+    '''
+    parts = destination.split(':')
+    host = parts[0]
+
+    if len(proxy_parts) == 2:
+        port = int(proxy_parts[1])
+    else:
+        port = 80
+
+    return (host, port)
+
+
+@gen.coroutine
+def tcp_connect_ok(host, port, timeout_seconds=1):
+    '''
+    Attempt TCP connection.
+    '''
+    try:
+        connect = yield gen.with_timeout(timedelta(seconds=timeout_seconds),
+                client.connect(host=proxy_host, port=proxy_port))
+        raise gen.Return(True)
+    except:
+        raise gen.Return(False)
+
 
 @gen.coroutine
 def tcp_connections(proxies,
@@ -76,3 +106,4 @@ def tcp_connections(proxies,
     if output_file is not None:
         with open(output_file, 'w+') as f:
             f.write('\n'.join(working_proxies))
+
