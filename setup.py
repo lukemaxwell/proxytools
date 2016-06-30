@@ -19,7 +19,7 @@ setup(
     #license=license,
     packages=['proxytools'],
     entry_points = {
-        'console_scripts': ['proxytools=proxytools.proxytools:cli'],
+        'console_scripts': ['proxytools=proxytools.cli:cli'],
     },
     install_requires=[
         'backports-abc>=0.4',
