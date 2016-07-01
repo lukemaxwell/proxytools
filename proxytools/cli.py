@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import click
-from tornado import ioloop, queues
 import logging
+from tornado import ioloop, queues
 
-from .proxytools import (get_url_status, process_items,
-                         process_tcp_items, get_proxies_from_url,
-                         google_search_proxies, tcp_connect_ok)
+from .proxytools import (get_proxy_status, get_url_status_with_proxy, process_items,
+                         get_proxies_from_url,
+                         google_search_proxies, ping_proxy)
+
 
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
@@ -27,6 +28,16 @@ def cli(log_level):
 
 
 @cli.command()
+@click.option('--timeout',
+              '-t',
+              type=click.INT,
+              default=10,
+              help='http connect timout (default: 10)')
+@click.option('--concurrency',
+              '-c',
+              type=click.INT,
+              default=100,
+              help="concurrent http requests (default: 100)")
 @click.option('--input-file',
               '-i',
               type=click.Path(exists=True),
@@ -36,7 +47,7 @@ def cli(log_level):
               help='proxy url in format PROTOCOL://USERNAME:PASSWORD@HOST:PORT')
 @click.argument('url', type=click.STRING)
 @click.pass_context
-def test_with_url(ctx, input_file, proxy, url, concurrency=100):
+def test_with_url(ctx, input_file, proxy, url, timeout, concurrency):
     '''
     Test proxies work with URL.
     \b
@@ -51,7 +62,11 @@ def test_with_url(ctx, input_file, proxy, url, concurrency=100):
         click.echo(ctx.get_help())
         raise click.exceptions.UsageError('supply --input-file or --proxy', ctx)
 
-    process_items(get_url_status, items=proxies, url='https://www.google.com')
+    process_items(get_url_status_with_proxy,
+                  items=proxies,
+                  url='https://www.google.com',
+                  timeout=timeout,
+                  concurrency=concurrency)
 
 
 @cli.command()
@@ -82,21 +97,21 @@ def extract(ctx, input_file, url):
               '-t',
               type=click.INT,
               default=10,
-              help='tcp connect timout (default: 10)')
+              help='http connect timout (default: 10)')
 @click.option('--concurrency',
               '-c',
               type=click.INT,
               default=100,
-              help="concurrent ping requests (default: 100)")
+              help="concurrent http requests (default: 100)")
 @click.option('--input-file',
               '-i',
               type=click.File(),
               help="file containing a list of urls")
 @click.option('--proxy', '-p', type=click.STRING)
 @click.pass_context
-def test_connect(ctx, input_file, proxy, timeout, concurrency):
+def test_with_http(ctx, input_file, proxy, timeout, concurrency):
     '''
-    Test proxy ports are open.
+    Test proxy responds to http connection.
     '''
     if input_file is not None:
         proxies = input_file.read().splitlines()
@@ -106,14 +121,46 @@ def test_connect(ctx, input_file, proxy, timeout, concurrency):
         click.echo(ctx.get_help())
         raise click.exceptions.UsageError('supply --input-file or --proxy', ctx)
 
-    process_tcp_items(tcp_connect_ok, items=proxies)
+    process_items(get_proxy_status, items=proxies, timeout=timeout, concurrency=concurrency)
+
+
+@cli.command()
+@click.option('--timeout',
+              '-t',
+              type=click.INT,
+              default=2,
+              help="ping timout (default: {})".format(2))
+@click.option('--concurrency',
+              '-c',
+              type=click.INT,
+              default=100,
+              help="concurrent ping requests (default: {})".format(100))
+@click.option('--input-file',
+              '-i',
+              type=click.File(),
+              help="file containing a list of urls")
+@click.option('--proxy', '-p', type=click.STRING)
+@click.pass_context
+def test_with_ping(ctx, input_file, proxy, timeout, concurrency):
+    '''
+    Test proxy responds to ping.
+    '''
+    if input_file is not None:
+        proxies = input_file.read().splitlines()
+    elif proxy is not None:
+        proxies = [proxy]
+    else:
+        click.echo(ctx.get_help())
+        raise click.exceptions.UsageError('supply --input-file or --proxy', ctx)
+
+    process_items(ping_proxy, items=proxies, timeout=timeout, concurrency=concurrency)
 
 
 @cli.command()
 @click.pass_context
 def search_sources(ctx):
     '''
-    Find web pages containing proxies.
+    Find URLs containing proxies.
     '''
     io_loop = ioloop.IOLoop.current()
     io_loop.run_sync(google_search_proxies)

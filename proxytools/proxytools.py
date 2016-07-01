@@ -5,13 +5,12 @@ import collections
 from datetime import timedelta
 import logging
 import re
+import signal
 import subprocess
 import sys
 import time
 from tornado import (httpclient, tcpclient, netutil,
-                     gen, ioloop, queues)
-
-logger = logging.getLogger(__name__)
+                     gen, ioloop, queues, iostream, process)
 
 try:
     from HTMLParser import HTMLParser
@@ -20,28 +19,24 @@ except ImportError:
     from html.parser import HTMLParser
     from urllib.parse import urljoin, urldefrag, urlencode, urlparse, urlunparse, parse_qsl
 
-
 from .parser import GoogleParser, ProxyParser, PingParser
-from .ping import ping_proxies
-from .tcp import tcp_connections
 
 
+### Config
+logger = logging.getLogger(__name__)
+#netutil.Resolver.configure('tornado.platform.caresresolver.CaresResolver')
+httpclient.AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
+# Named tuple for storing proxies
+Proxy = collections.namedtuple('Proxy', 'protocol username password host port')
+# Headers used for http requests
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:17.0) Gecko/20100101 Firefox/17.0;',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'en-US',
     'Accept-Encoding': 'gzip, deflate',
 }
-CONNECT_TIMEOUT = 10
-PING_TIMEOUT = 1
-CONNECT_TIMEOUT = 2
-TCP_TIMEOUT = 2
-CONCURRENCY = 100
+STREAM = process.Subprocess.STREAM
 
-httpclient.AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
-
-# Named tuple for storing proxies
-Proxy = collections.namedtuple('Proxy', 'protocol username password host port')
 
 class ProxyToolsError(Exception):
     """
@@ -49,11 +44,6 @@ class ProxyToolsError(Exception):
     """
     def __init__(self, message):
         self.message = message
-
-
-def on_timeout():
-    print("timeout")
-    ioloop.IOLoop.current().stop()
 
 
 def print_data(data, func):
@@ -64,22 +54,9 @@ def print_data(data, func):
     if func ==  get_proxies_from_url:
         for proxies in data.values(): 
             print(*proxies, sep='\n')
-    elif func ==  get_url_status:
-        for key, val in data.items():
-            print('{}: {}'.format(key, val))
-    elif func == tcp_connect_ok:
-        for key, val in data.items():
-            print('{}: {}'.format(key, val))
     else:
-        raise NotImplemented
-
-
-
-def parse_host(proxy):
-    '''
-    Parse host from proxy string.
-    '''
-    pass
+        for key, val in data.items():
+            print('{} {}'.format(key, val))
 
 
 def proxy_from_string(proxy):
@@ -118,9 +95,11 @@ def proxy_from_string(proxy):
         host = loc_parts[0]
 
         try:
-            port = loc_parts[1]
+            port = int(loc_parts[1])
         except IndexError:
             pass # use default
+        except ValueError:
+            raise ValueError('Port must be a number: {}'.format(loc_parts[1]))
     else:
         loc_parts = parts[0].split(':')
         host = loc_parts[0]
@@ -137,21 +116,27 @@ def proxy_from_string(proxy):
                   password=password)
     return proxy
 
-    
 
+def parse_error_code(error):
+    '''
+    Parse a tornado httpclient.HTTPError and return code as integer.
 
-@gen.coroutine
-def tcp_connect_ok(proxy_string, client, timeout_seconds=1):
+    Example error:
+    "HTTP 599: Connection timed out after 2001 milliseconds"
     '''
-    Attempt TCP connection.
-    '''
-    proxy = proxy_from_string(proxy_string)
     try:
-        connect = yield gen.with_timeout(timedelta(seconds=timeout_seconds),
-                client.connect(host=proxy.host, port=proxy.port))
-        raise gen.Return(True)
+        code = error.split(':')[0].split()[1]
+    except IndexError:
+        raise ValueError('Could not parse tornado error: {}'.format(error))
+    except Exception as e:
+        raise
+
+    try:
+        code = int(code)
     except:
-        raise gen.Return(False)
+        raise ValueError('Could not parse tornado error: {}'.format(error))
+
+    return code
 
 
 @gen.coroutine
@@ -178,13 +163,14 @@ def get_links_from_url(url):
 
 
 @gen.coroutine
-def get_proxies_from_url(url):
+def get_proxies_from_url(url, timeout=5):
     """Download the page at `url` and parse it for proxies.
     """
+    proxies = []
     try:
         response = yield httpclient.AsyncHTTPClient().fetch(url,
                                                             headers=HEADERS,
-                                                            connect_timeout=CONNECT_TIMEOUT,
+                                                            connect_timeout=timeout,
                                                             validate_cert=False)
         logger.debug('fetched %s' % url)
 
@@ -194,9 +180,8 @@ def get_proxies_from_url(url):
         proxies = parser.get_proxies(body)
     except Exception as e:
         logger.debug('Exception: %s %s' % (e, url))
-        raise gen.Return([])
-
-    raise gen.Return(proxies)
+    finally:
+        raise gen.Return(proxies)
 
 
 @gen.coroutine
@@ -230,6 +215,9 @@ def get_google_results(query, base_url='https://www.google.co.uk/search', num_re
 
 
 def add_params_to_url(url, params):
+    '''
+    Safely add or update URL parameters.
+    '''
     url_parts = list(urlparse(url))
     query = dict(parse_qsl(url_parts[4]))
     query.update(params)
@@ -238,12 +226,16 @@ def add_params_to_url(url, params):
 
     return urlunparse(url_parts)
 
+
 def remove_fragment(url):
     pure_url, frag = urldefrag(url)
     return pure_url
 
 
 def get_links(html):
+    '''
+    Extract href links from html.
+    '''
     class URLSeeker(HTMLParser):
         def __init__(self):
             HTMLParser.__init__(self)
@@ -260,6 +252,9 @@ def get_links(html):
 
 
 def get_google_result_links(html):
+    '''
+    Extract href links from Google results page.
+    '''
     class URLSeeker(HTMLParser):
         def __init__(self):
             HTMLParser.__init__(self)
@@ -276,74 +271,51 @@ def get_google_result_links(html):
 
 
 @gen.coroutine
-def get_proxies_from_urls(urls, output_file=None):
-    q = queues.Queue()
-    start = time.time()
-    fetching, fetched = set(), set()
-    all_proxies = set()
-
-    @gen.coroutine
-    def fetch_url():
-        current_url = yield q.get()
-        try:
-            if current_url in fetching:
-                return
-
-            print('fetching %s' % current_url)
-            fetching.add(current_url)
-            proxies = yield get_proxies_from_url(current_url)
-            for proxy in proxies:
-                all_proxies.add(proxy)
-            fetched.add(current_url)
-
-        finally:
-            q.task_done()
-
-    @gen.coroutine
-    def worker():
-        while True:
-            yield fetch_url()
-
-    for url in urls:
-        q.put(url)
-
-    # Start workers, then wait for the work queue to be empty.
-    for _ in range(CONCURRENCY):
-        worker()
-    yield q.join(timeout=timedelta(seconds=300))
-    assert fetching == fetched
-    print('Done in %d seconds, fetched %s URLs. found %s proxies.' % (
-        time.time() - start, len(fetched), len(all_proxies)))
-
-    all_proxies = set(all_proxies)
-
-    if output_file is not None:
-        with open(output_file, 'w+') as f:
-            f.write('\n'.join(all_proxies))
-
-
-@gen.coroutine
-def get_url_status(proxy, url, timeout=5):
-    proxy_parts = proxy.split(':')
-    proxy_host = 'http://{}'.format(proxy_parts[0])
-
-    if len(proxy_parts) == 2:
-        proxy_port = int(proxy_parts[1])
-    else:
-        proxy_port = 80
-
+def get_url_status_with_proxy(proxy, url, timeout=5):
+    '''
+    Fetch URL with proxy and return status code or error message.
+    '''
+    proxy = proxy_from_string(proxy)
     try:
         response = yield httpclient.AsyncHTTPClient().fetch(url,
                                                             headers=HEADERS,
-                                                            proxy_host=proxy_host,
-                                                            proxy_port=proxy_port,
+                                                            proxy_host=proxy.host,
+                                                            proxy_port=int(proxy.port),
+                                                            connect_timeout=timeout,
                                                             request_timeout=timeout,
-                                                            validate_cert=False )
+                                                            validate_cert=False)
         code = response.code 
     except httpclient.HTTPError as e:
-        code = e
+        #code = parse_error_code(str(e))
+        code = str(e)
+    finally:
+        raise gen.Return(code)
 
-    raise gen.Return(code)
+
+
+@gen.coroutine
+def get_proxy_status(proxy, timeout=5, concurrency=100):
+    '''
+    Fetch URL and return status code or error message.
+    '''
+    invalid_codes = [599]
+    status = 'DOWN'
+    proxy = proxy_from_string(proxy)
+    url = '{}://{}:{}'.format(proxy.protocol, proxy.host, proxy.port)
+    try:
+        response = yield httpclient.AsyncHTTPClient().fetch(url,
+                                      headers=HEADERS,
+                                      request_timeout=timeout,
+                                      connect_timeout=timeout,
+                                      validate_cert=False)
+        code = response.code
+    except httpclient.HTTPError as e:
+        #code = parse_error_code(str(e)) 
+        code = str(e)
+    except Exception as e:
+        code = str(e)
+    finally:
+        raise gen.Return(code)
 
 
 @gen.coroutine
@@ -364,6 +336,9 @@ def consumer(q, processing, func, *args, **kwargs):
                 data = {item: results}
                 print_data(data, func)
                 raise gen.Return(results)
+            except Exception as e:
+                #print(e)
+                pass
             finally:
                 q.task_done()
                 processing.remove(item)
@@ -380,249 +355,84 @@ def process_items(func, items, concurrency=100, *args, **kwargs):
         consumer(q, processing, func, *args, **kwargs)
 
     loop = ioloop.IOLoop.current()
+    signal.signal(signal.SIGINT, lambda sig, frame: loop.add_callback_from_signal(kill))
 
     def stop(future):
             loop.stop()
             future.result()  # Raise error if there is one
 
-    # Wait for consumer to finish all tasks
-    q.join().add_done_callback(stop)
-    loop.start()
-
-
-@gen.coroutine
-def process_tcp_items(func, items, concurrency=100, *args, **kwargs):
-    q = queues.Queue()
-    processing = set()
-    producer(items, q)
-    netutil.Resolver.configure('tornado.netutil.ThreadedResolver')
-    loop = ioloop.IOLoop.current()
-    resolver = netutil.Resolver(io_loop=loop)
-    client = tcpclient.TCPClient(resolver=resolver)
-
-    # Start workers, then wait for the work queue to be empty.
-    for _ in range(concurrency):
-        consumer(q, processing, func, client=client, *args, **kwargs)
-
-    def stop(future):
+    def kill():
             loop.stop()
-            client.close()
-            future.result()  # Raise error if there is one
 
     # Wait for consumer to finish all tasks
     q.join().add_done_callback(stop)
     loop.start()
-
-@gen.coroutine
-def test_proxies_with_url(proxies, url):
-    q = queues.Queue()
-    start = time.time()
-    fetching, fetched = set(), set()
-    working_proxies = set()
-    results = set()
-
-    @gen.coroutine
-    def test_proxy():
-        current_proxy = yield q.get()
-        try:
-            if current_proxy in fetching:
-                return
-
-            proxy_parts = current_proxy.split(':')
-            proxy_host = 'http://{}'.format(proxy_parts[0])
-
-            if len(proxy_parts) == 2:
-                proxy_port = int(proxy_parts[1])
-            else:
-                proxy_port = 80
-
-            print('fetching with %s:%s' % (proxy_host, proxy_port))
-            fetching.add(current_proxy)
-            try:
-                response = yield httpclient.AsyncHTTPClient().fetch(url,
-                                                                    headers=HEADERS,
-                                                                    proxy_host=proxy_host,
-                                                                    proxy_port=proxy_port,
-                                                                    request_timeout=5,
-                                                                    validate_cert=False )
-                results.add((current_proxy, response.code))
-                working_proxies.add(current_proxy)
-                print('{} OK'.format(current_proxy))
-            except httpclient.HTTPError as e:
-                print(e)
-                results.add((current_proxy, e)) # Gateway Timeout
-
-            fetched.add(current_proxy)
-
-        finally:
-            q.task_done()
-
-    @gen.coroutine
-    def worker():
-        while True:
-            yield test_proxy()
-
-    for proxy in proxies:
-        q.put(proxy)
-
-    # Start workers, then wait for the work queue to be empty.
-    for _ in range(CONCURRENCY):
-        worker()
-
-    yield q.join(timeout=timedelta(seconds=300))
-    assert fetching == fetched
-    print('Done in %d seconds, fetched %s URLs. Found %s proxies, discarded %s proxies.' % (
-        time.time() - start, len(fetched), len(working_proxies), len(proxies) - len(working_proxies)))
 
 
 @gen.coroutine
 def google_search_proxies():
     logger.debug('Searching google...')
-    query = '+":8080" +":3128" +":80" filetype:txt'
+    query = '+":8080" +":3128" +":80" filetype:txt -inurl:ftp'
     urls = yield get_google_results(query)
     print(*urls,sep='\n')
     raise gen.Return(urls)
 
 
-CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
-@click.group(context_settings=CONTEXT_SETTINGS)
-def cli():
-    pass
+@gen.coroutine
+def call_subprocess(cmd, stdin_data=None, stdin_async=False):
+    """
+    Wrapper around subprocess call using Tornado's Subprocess class.
+    """
+    stdin = STREAM if stdin_async else subprocess.PIPE
 
+    sub_process = process.Subprocess(
+        cmd, stdin=stdin, stdout=STREAM, stderr=STREAM
+    )
 
-@cli.command()
-@click.argument('output', type=click.Path())
-def search_sources(output):
-    '''
-    Find web pages containing proxies.
-    '''
-    io_loop = ioloop.IOLoop.current()
-    io_loop.run_sync(lambda: google_search_proxies(output))
+    if stdin_data:
 
+        stdin_data = bytes(stdin_data, 'utf-8')
+        if stdin_async:
+            yield gen.Task(sub_process.stdin.write, stdin_data)
+        else:
+            print('yeah, here')
+            sub_process.stdin.write(stdin_data)
 
-@cli.command()
-@click.option('--input-file',
-              '-i',
-              type=click.Path(exists=True),
-              help="file containing a list of proxies")
-@click.option('--proxy',
-              '-p',
-              help='proxy url in format PROTOCOL://USERNAME:PASSWORD@HOST:PORT')
-@click.argument('url', type=click.STRING)
-@click.pass_context
-def test_url(ctx, input_file, proxy, url):
-    '''
-    Test proxies work for URL.
-    '''
-    if input_file is not None:
-        with open(input_file) as f:
-            proxies = f.read().splitlines()
-    elif proxy is not None:
-        proxies = [proxy]
-    else:
-        click.echo(ctx.get_help())
-        raise click.exceptions.UsageError('supply --input-file or --proxy', ctx)
+    if stdin_async or stdin_data:
+        sub_process.stdin.close()
 
-    io_loop = ioloop.IOLoop.current()
-    io_loop.add_callback(lambda: print('hi'))
-    io_loop.run_sync(lambda: test_proxies_with_url(proxies, url))
-
-
-@cli.command()
-@click.option('--timeout',
-              '-t',
-              type=click.INT,
-              default=PING_TIMEOUT,
-              help="ping timout (default: {})".format(PING_TIMEOUT))
-@click.option('--concurrency',
-              '-c',
-              type=click.INT,
-              default=CONCURRENCY,
-              help="concurrent ping requests (default: {})".format(CONCURRENCY))
-@click.argument('input_file', type=click.Path())
-@click.argument('output_file', type=click.Path())
-def test_ping(input_file, output_file, timeout, concurrency):
-    '''
-    Test proxy servers respond to ping.
-    '''
-    with open(input_file) as f:
-        proxies = f.read().splitlines()
-
-    bar = click.progressbar(length=len(proxies), label='Pinging proxies')
-    io_loop = ioloop.IOLoop.current()
-    io_loop.run_sync(lambda: ping_proxies(proxies=proxies,
-                                        output_file=output_file,
-                                        concurrency=concurrency,
-                                        timeout=timeout,
-                                        progress_bar=bar))
-    bar.finish()
-
-
-@cli.command()
-@click.option('--timeout',
-              '-t',
-              type=click.INT,
-              default=CONNECT_TIMEOUT,
-              help="tcp connect timout (default: {})".format(CONNECT_TIMEOUT))
-@click.option('--concurrency',
-              '-c',
-              type=click.INT,
-              default=CONCURRENCY,
-              help="concurrent ping requests (default: {})".format(CONCURRENCY))
-@click.argument('input_file', type=click.Path())
-@click.argument('output_file', type=click.Path())
-def test_connect(input_file, output_file, timeout, concurrency):
-    '''
-    Test proxy ports are open.
-    '''
-    with open(input_file) as f:
-        proxies = f.read().splitlines()
-
-    bar = click.progressbar(length=len(proxies), label='Testing ports')
-    io_loop = ioloop.IOLoop.current()
-    io_loop.run_sync(lambda: tcp_connections(proxies=proxies,
-                                        output_file=output_file,
-                                        concurrency=concurrency,
-                                        progress_bar=bar))
-    bar.finish()
-
-
-@cli.command()
-@click.option('--input-file',
-              '-i',
-              type=click.Path(exists=True),
-              help="file containing a list of urls")
-@click.argument('output-file', type=click.Path())
-@click.option('--url', '-u', type=click.STRING)
-@click.pass_context
-def scrape(ctx, input_file, url, output_file):
-    '''
-    Scrape proxies.
-    '''
-    urls = []
-    if input_file is not None:
-        with open(input_file) as f:
-            urls = f.read().splitlines()
-    elif url is not None:
-        urls = [url]
-    else:
-        click.echo(ctx.get_help())
-        raise click.exceptions.UsageError('supply --input-file or --url', ctx)
-
-    if urls:
-        io_loop = ioloop.IOLoop.current()
-        io_loop.run_sync(lambda: get_proxies_from_urls(urls, output_file))
-
-@cli.command()
-def testy():
-    items = [
-        '92.255.172.214:8080',
-        '115.127.33.186:8080',
-        '179.242.77.205:8080'
+    result, error = yield [
+        gen.Task(sub_process.stdout.read_until_close),
+        gen.Task(sub_process.stderr.read_until_close)
     ]
-    process_items(get_url_status, items=items, url='https://www.google.com')
 
-if __name__ == '__main__':
-    import logging
-    logging.basicConfig()
-    cli()
+    raise gen.Return((result, error))
+
+
+@gen.coroutine
+def ping_proxy(proxy_string, timeout=3):
+    '''
+    Ping proxy server.
+    '''
+    proxy = proxy_from_string(proxy_string)
+    parser = PingParser()
+    ping_result = 'FAIL'
+    ping_cmd = [
+        'ping',
+        '-q',
+        '-w',
+        '{}'.format(timeout),
+        '-p',
+        '{}'.format(proxy.port),
+        '{}'.format(proxy.host)
+    ]
+    try:
+        result, error = yield call_subprocess(ping_cmd, stdin_async=True)
+        parsed_result = parser.parse(result.decode('utf-8'))
+        if 'lost' in parsed_result:
+            if parsed_result['lost'] == 0:
+                ping_result = 'OK'
+    except Exception as e:
+        logger.debug(e)
+    finally:
+        raise gen.Return(ping_result)
