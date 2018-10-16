@@ -4,6 +4,7 @@ import click
 import collections
 from datetime import timedelta
 import logging
+import json
 import re
 import signal
 import subprocess
@@ -52,7 +53,7 @@ def print_data(data, func):
     Custom print formatter for data returned by proxytools methods.
     '''
     if func ==  get_proxies_from_url:
-        for proxies in data.values(): 
+        for proxies in data.values():
             print(*proxies, sep='\n')
     else:
         for key, val in data.items():
@@ -77,7 +78,7 @@ def proxy_from_string(proxy):
     except AttributeError:
         pass # use default
 
-    # Split the remainder into user, pass, host, port  
+    # Split the remainder into user, pass, host, port
     fragment = proxy.replace(protocol, '')
     fragment = fragment.replace('://', '')
     parts = fragment.split('@')
@@ -284,7 +285,7 @@ def get_url_status_with_proxy(proxy, url, timeout=5):
                                                             connect_timeout=timeout,
                                                             request_timeout=timeout,
                                                             validate_cert=False)
-        code = response.code 
+        code = response.code
     except httpclient.HTTPError as e:
         #code = parse_error_code(str(e))
         code = str(e)
@@ -310,7 +311,7 @@ def get_proxy_status(proxy, timeout=5, concurrency=100):
                                       validate_cert=False)
         code = response.code
     except httpclient.HTTPError as e:
-        #code = parse_error_code(str(e)) 
+        #code = parse_error_code(str(e))
         code = str(e)
     except Exception as e:
         code = str(e)
@@ -332,7 +333,7 @@ def consumer(q, processing, func, *args, **kwargs):
             processing.add(item)
             try:
                 logger.debug('Processing %s' % item)
-                results = yield func(item, *args, **kwargs) 
+                results = yield func(item, *args, **kwargs)
                 data = {item: results}
                 print_data(data, func)
                 raise gen.Return(results)
@@ -436,3 +437,34 @@ def ping_proxy(proxy_string, timeout=3):
         logger.debug(e)
     finally:
         raise gen.Return(ping_result)
+
+
+def geoip_lookup(proxies):
+    """
+    Return geoip results for `proxies`.
+
+    Uses ip-api.com.
+    """
+    wait = 0.5
+    http_client = httpclient.HTTPClient()
+    results = {}
+    root_url = 'http://ip-api.com/json'
+    for proxy in proxies:
+        ip = proxy.split(':')[0]
+        ip = ip.split(' ')[0]
+        url = '{}/{}'.format(root_url, ip)
+        logger.info(url)
+        try:
+            response = http_client.fetch(url, request_timeout=5)
+            result = json.loads(response.body.decode('utf8'))
+        except Exception as e:
+            result = str(e)
+
+        results[proxy] = result
+        time.sleep(wait)
+
+    http_client.close()
+    return results
+
+
+

@@ -2,11 +2,11 @@
 from setuptools import setup, find_packages
 
 
-with open('README.rst') as f:
+with open('README.md') as f:
     readme = f.read()
 
-#with open('LICENSE') as f:
-#    license = f.read()
+with open('LICENSE') as f:
+    license = f.read()
 
 setup(
     name='proxytools',
@@ -15,19 +15,25 @@ setup(
     long_description=readme,
     author='Luke Maxwell',
     author_email='luke@codepunk.xyz',
-    url='',
-    #license=license,
+    url='https://github.com/lukemaxwell/proxytools',
+    license=license,
     packages=['proxytools'],
     entry_points = {
         'console_scripts': ['proxytools=proxytools.cli:cli'],
     },
     install_requires=[
-        'backports-abc>=0.4',
-        'click>=6.6',
-        'lxml>=3.6.0',
-        'pycurl>=7.43.0',
-        'tornado>=4.3',
-        'colorama>=0.3.7',
+        'asyncio',
+        'click',
+        'inscriptis',
+        'lxml',
+        'pandas',
+        'pyppeteer',
+        'yarl',
+    ],
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
     ],
     # packages=find_packages(exclude=('tests', 'docs'))
 )
