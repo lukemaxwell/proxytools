@@ -1,6 +1,11 @@
 # Proxytools
 
-A command line tool for finding and testing public web proxies.
+Utilities finding and testing public web proxies.
+
+Proxytools offers both a command line interface and Python library to support
+mining and testing open web proxies.
+
+Meant for research purposes only.
 
 ## Installation
 
