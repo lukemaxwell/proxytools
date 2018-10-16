@@ -151,7 +151,7 @@ class Client:
                                                                    selector=selector) for proxy in chunk],
                                           return_exceptions=True)
             count += len(chunk)
-            minutes = (datetime.now() - start_ts).seconds / 60
+            minutes = round((datetime.datetime.now() - start_ts).seconds / 60, 2)
             _logger.info('Tested {} of {} proxies in {} minutes'.format(count, len(proxies), minutes))
             results.extend(result)
         return results
