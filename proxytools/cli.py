@@ -27,7 +27,7 @@ _logger = logging.getLogger(__name__)
 ####################
 
 @click.group()
-@click.option('--log-level',  type=click.Choice(_log_levels), default='WARNING')
+@click.option('--log-level',  type=click.Choice(_log_levels), default='WARNING', envvar='LOG_LEVEL')
 def cli(log_level):
     # Configure logging
     level = logging.getLevelName(log_level)
