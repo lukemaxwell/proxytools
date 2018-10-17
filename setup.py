@@ -23,7 +23,9 @@ setup(
     },
     install_requires=[
         'asyncio',
+        'beautifulsoup4', # required for pandas.read_html
         'click',
+        'html5lib', # required for pandas.read_html
         'inscriptis',
         'lxml',
         'pandas',
