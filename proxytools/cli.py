@@ -9,7 +9,7 @@ import logging
 import os
 
 import proxytools
-from proxytools.parser import ProxyParser
+#from .parser import ProxyParser
 
 _log_levels = [
     'NOTSET',
@@ -39,18 +39,18 @@ def cli(log_level):
 
 @cli.command()
 @click.argument('html_file', type=click.File('r'))
-def parse_proxies(html_file):
+def parse(html_file):
     """
     Parse proxies from file
     """
     html = html_file.read()
-    parser = ProxyParser()
+    parser = proxytools.parser.ProxyParser()
     proxies = [str(p) for p in parser.parse_proxies(html)]
     print(json.dumps(proxies, indent=4))
 
 
 @cli.command()
-def get_sources():
+def sources():
     """
     Search Google for proxy sources
     """
@@ -60,12 +60,12 @@ def get_sources():
 
 
 @cli.command()
-def get_proxies():
+def search():
     """
     Scrape proxies from the web
     """
     client = proxytools.Client()
-    proxies = client.get_proxies()
+    proxies = client.search_proxies()
     urls = [str(p) for p in proxies]
     print(json.dumps(urls, indent=4))
 
@@ -77,7 +77,7 @@ def get_proxies():
 @click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
 def test(proxy, url, headless, concurrency):
     """
-    Test a proxy for a given URL.
+    Test a proxy for a given URL
     """
     client = proxytools.Client()
     results = client.test_proxies([proxy], url, headless=headless, concurrency=concurrency)
@@ -91,11 +91,28 @@ def test(proxy, url, headless, concurrency):
 @click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
 def test_from_file(json_file, url, headless, concurrency):
     """
-    Test proxies for a given URL.
+    Test proxies for a given URL
+
+    File expected in JSON format.
     """
     proxies = json.load(json_file)
     client = proxytools.Client()
     results = client.test_proxies(proxies, url, headless=headless, concurrency=concurrency)
+    print(json.dumps(results, indent=4))
+
+
+@cli.command()
+@click.argument('test-url', type=click.STRING)
+@click.option('--headless/--no-headless', default=True)
+@click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
+@click.option('--limit', '-l',  help='number of proxies to get', default=1)
+def get(test_url, headless, concurrency, limit):
+    """
+    Get a working proxy
+    """
+    client = proxytools.Client()
+    results = client.get_proxies(test_url, headless=headless,
+                                 concurrency=concurrency, limit=limit)
     print(json.dumps(results, indent=4))
 
 

@@ -20,6 +20,11 @@ class Proxy:
         return str(self.url)
 
     def as_dict(self):
+        """
+        Return dictionary representation of object.
+
+        :returns: dict
+        """
         return {
             'host': self.host,
             'port': self.port

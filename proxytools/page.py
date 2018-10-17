@@ -12,6 +12,7 @@ class Page:
         """
         :param url: the page URL
         :param html: the page html
+
         :type url: yarl.URL
         :type html: str
         """

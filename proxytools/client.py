@@ -10,8 +10,8 @@ import logging
 import pyppeteer
 import time
 import yarl
-
-from proxytools import Page
+# Proxytools
+from .page import Page
 
 # Module vars
 _logger = logging.getLogger(__name__)
@@ -30,14 +30,45 @@ class ProxyToolError(Exception):
 
 
 class Client:
+    """
+    Proxytools client.
+
+    The is the main entry point for proxytools.
+    """
     def __init__(self):
         self.loop = asyncio.get_event_loop()
 
     def _chunker(self, iterable, n, fillvalue=None):
+        """
+        Split `iterable` into chunks of size `n`.
+
+        :param iterable: iterator to chunk
+        :param n: chunk size
+        :param fillvalue: use value as padding
+
+        :type iterable: list
+        :type n: int
+        :type fillvalue: str or int
+
+        :returns: iterator
+        """
         args = [iter(iterable)] * n
         return itertools.zip_longest(*args, fillvalue=fillvalue)
 
     async def _async_get_pages(self, urls, concurrency=10, headless=True):
+        """
+        Asynchronously get pages from `urls` using chromium.
+
+        :param urls: URLs to get
+        :param concurrency: number of concurrent chromium tabs to utilise
+        :param headless: use chrome in headless mode
+
+        :type urls: list
+        :type concurrency: int
+        :type headless: bool
+
+        :returns: list
+        """
         browser = await pyppeteer.launch({'headless': headless})
         pages = []
         # Create incognito tab
@@ -52,7 +83,15 @@ class Client:
 
     async def _async_get_source_urls(self, num=10, headless=True):
         """
-        Get proxy sources from Google.
+        Scrape proxy sources from Google.
+
+        :param num: number of results to fetch
+        :param headless: use chrome in headless mode
+
+        :type num: int
+        :type headless: bool
+
+        :returns: list
         """
         urls = []
         browser = await pyppeteer.launch({'headless': headless})
@@ -95,6 +134,8 @@ class Client:
         :type selector: str
         :type headless: bool
         :type timeout: int
+
+        :returns: dict
         """
         browser = await pyppeteer.launch(
             {
@@ -125,35 +166,51 @@ class Client:
                                   headless=True,
                                   timeout=10,
                                   concurrency=1,
+                                  exit_success_count=None,
                                   selector=None):
         """
         Test `proxies` by attempting to load `url' and awaiting `selector`.
 
         :param proxies: list of proxies
         :param url: the URL to test the proxies against
+        :param headless: run chrome headless mode
+        :param timeout: seconds to wait before quitting each test
+        :param concurrency: number of concurrent chromium tabs to utilise
         :param selector: css selector used to verify page load
+        :param exit_success_count: exit when number of working proxies is reached
 
         :type proxies: list of proxytools.Proxy
         :type url: yarl.URL
-        :type context: pyppeteer.browser.BrowserContext
+        :type headless: bool
+        :type timeout: int
+        :type concurrency: int
         :type selector: str
+        :type exit_success_count: int
 
         :returns: dict
         """
         results = []
         count = 0
+        status_ok_count = 0
         start_ts = datetime.datetime.now()
         for chunk in self._chunker(proxies, concurrency):
-            result = await asyncio.gather(*[self._async_test_proxy(proxy,
-                                                                   url,
-                                                                   headless=headless,
-                                                                   timeout=timeout,
-                                                                   selector=selector) for proxy in chunk],
-                                          return_exceptions=True)
+            n_results = await asyncio.gather(
+                *[self._async_test_proxy(
+                    proxy, url, headless=headless,
+                    timeout=timeout, selector=selector) for proxy in chunk],
+                return_exceptions=True)
             count += len(chunk)
             minutes = round((datetime.datetime.now() - start_ts).seconds / 60, 2)
-            _logger.info('Tested {} of {} proxies in {} minutes'.format(count, len(proxies), minutes))
-            results.extend(result)
+            _logger.info('Tested {} of {} proxies in {} minutes'
+                         .format(count, len(proxies), minutes))
+            for result in n_results:
+                results.append(result)
+                if result['status'] == 'OK':
+                    status_ok_count += 1
+                if exit_success_count is not None:
+                    if status_ok_count == exit_success_count:
+                        return results
+            # results.extend(n_results)
         return results
 
     async def get_page(self, url, context, timeout=10, selector=None):
@@ -163,11 +220,16 @@ class Client:
 
         :param url: the page URL
         :param context: pyppeteer browser context
+        :param timeout: seconds to wait before quiting
+        :param selector: css selector used to verify page load
 
         :type url: yarl.URL
         :type context: pyppeteer.browser.BrowserContext
+        :type timeout: int
+        :type selector: str
 
         :returns: Page
+        :raises: TaskTimeout
         """
         tab = await context.newPage()
         # Fix viewport
@@ -213,7 +275,9 @@ class Client:
 
     def get_source_urls(self):
         """
-        Search Google for free proxy lists.
+        Search Google for URLs containing free proxy lists.
+
+        :returns: list
         """
         _logger.info('Searching Google for proxy sources..')
         return self.loop.run_until_complete(self._async_get_source_urls())
@@ -230,7 +294,7 @@ class Client:
         _logger.info('Found {} pages containing proxies'.format(len(pages)))
         return proxy_pages
 
-    def get_proxies(self):
+    def search_proxies(self):
         """
         Scrape the web for proxies.
         """
@@ -241,11 +305,29 @@ class Client:
         _logger.info('Scraped {} proxies'.format(len(proxies)))
         return proxies
 
-
     def test_proxies(self, proxies, url, timeout=10,
-                     selector=None, headless=True, concurrency=1):
+                     selector=None, headless=True, concurrency=2,
+                     exit_success_count=None):
         """
-        Test proxies can load page at 'url'.
+        Test proxies can load page at `url`.
+
+        :param proxies: list of proxies
+        :param url: the URL to test the proxies against
+        :param headless: run chrome headless mode
+        :param timeout: seconds to wait before quitting each test
+        :param concurrency: number of concurrent chromium tabs to utilise
+        :param selector: css selector used to verify page load
+        :param exit_success_count: exit when number of working proxies is reached
+
+        :type proxies: list of proxytools.Proxy
+        :type url: yarl.URL
+        :type headless: bool
+        :type timeout: int
+        :type concurrency: int
+        :type selector: str
+        :type exit_success_count: int
+
+        :returns: dict
         """
         return self.loop.run_until_complete(
             self._async_test_proxies(proxies,
@@ -253,4 +335,36 @@ class Client:
                                      timeout=timeout,
                                      concurrency=concurrency,
                                      selector=selector,
+                                     exit_success_count=exit_success_count,
                                      headless=headless))
+
+    def get_proxies(self, test_url, limit=10, timeout=10,
+                     selector=None, headless=True, concurrency=2):
+        """
+        Scrape the web for working proxies.
+        Test proxies can load `test_url`.
+
+        :param proxies: list of proxies
+        :param test_url: the URL to test the proxies against
+        :param headless: run chrome headless mode
+        :param timeout: seconds to wait before quitting each test
+        :param concurrency: number of concurrent chromium tabs to utilise
+        :param selector: css selector used to verify proxy is working
+
+        :type proxies: list of proxytools.Proxy
+        :type test_url: yarl.URL
+        :type headless: bool
+        :type timeout: int
+        :type concurrency: int
+        :type selector: str
+
+        :returns: dict
+        """
+        proxies = self.search_proxies()
+
+        results = self.test_proxies(proxies, test_url,
+                                    headless=headless, concurrency=concurrency,
+                                    exit_success_count=limit)
+        proxies = [r for r in results if r['status'] == 'OK']
+        return proxies[0:limit]
+
