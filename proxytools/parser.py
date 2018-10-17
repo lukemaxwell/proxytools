@@ -3,6 +3,7 @@
 Parser module.
 """
 import inscriptis
+import ipaddress
 import logging
 import pandas
 import re
@@ -14,12 +15,21 @@ from .proxy import Proxy
 _logger = logging.getLogger(__name__)
 
 
+# Custom exceptions
 class ParserError(Exception):
     ''' Generic parser exception. '''
 
 
 class ColumnNotFound(Exception):
     ''' Parser did not find column in pandas DataFrame. '''
+
+
+class PortNotFound(Exception):
+    ''' Could not parse port. '''
+
+
+class IPNotFound(Exception):
+    ''' Could not parse IP. '''
 
 
 class ProxyParser():
@@ -128,8 +138,12 @@ class ProxyParser():
         :returns: list
         :raises: ParserError
         """
-        dfs = pandas.read_html(html)
         proxies = []
+        try:
+            dfs = pandas.read_html(html)
+        except ValueError:
+            # No tables found
+            raise ParserError('Could not extract proxies with pandas, no tables found')
 
         for df in dfs:
             host_col = None
@@ -140,28 +154,76 @@ class ProxyParser():
             try:
                 host_col = self.get_host_column_from_df(df)
             except ColumnNotFound:
-                pass
+                raise ParserError('Could not parse host column')
 
             try:
                 port_col = self.get_port_column_from_df(df)
             except ColumnNotFound:
-                pass
+                raise ParserError('Could not parse port column')
 
             # Extract the proxies
-            if host_col is not None and port_col is not None:
-                for idx, row in df.iterrows():
-                    host = str(row[host_col]).strip()
-                    if host != 'nan':
-                        try:
-                            port = int(round(row[port_col]))
-                        except ValueError:
-                            port = 80
+            for idx, row in df.iterrows():
+                host = str(row[host_col]).strip()
+                try:
+                    host = self.parse_ip(row[host_col])
+                except IPNotFound:
+                    continue
 
-                        proxy = Proxy(host=host, port=port)
-                        proxies.append(proxy)
-                return proxies
+                try:
+                    port = self.parse_port(row[port_col])
+                except PortNotFound:
+                    continue
 
-        raise ParserError('Could not extract proxies with pandas')
+                proxy = Proxy(host=host, port=port)
+                proxies.append(proxy)
+
+            return proxies
+
+
+    def parse_port(self, val):
+        """
+        Parse proxy port from `val`.
+
+        :param val: the val to parse port from
+
+        :returns: int
+        """
+        if isinstance(val, float):
+            try:
+                return int(round(val))
+            except ValueError:
+                pass
+        elif isinstance(val, str):
+            val = val.strip()
+            try:
+                return int(val)
+            except:
+                pass
+
+        _logger.debug('Could not parse port from: {}'.format(val))
+        raise PortNotFound('Could not parse port')
+
+    def parse_ip(self, val):
+        """
+        Parse proxy IP from `val`.
+
+        :param text: the text to parse
+        :returns: str
+        """
+        try:
+            text = str(val)
+        except TypeError:
+            _logger.debug('Could not extract ip from text: {}'.format(text))
+            raise IPNotFound('Could not parse IP')
+
+        matches = re.findall(self.ip_regex, text)
+        ips = [m.replace(' ', '').replace('\t', '') for m in matches]
+        # Assume there is only one
+        try:
+            return ips[0]
+        except IndexError:
+            _logger.debug('Could not extract ip from text: {}'.format(text))
+            raise IPNotFound('Could not parse IP')
 
     def parse_proxies(self, html):
         """
