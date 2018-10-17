@@ -113,7 +113,6 @@ class Client:
 
         return urls
 
-
     async def _async_test_proxy(self,
                                 proxy,
                                 url,
@@ -273,20 +272,20 @@ class Client:
 
         return pages
 
-    def get_source_urls(self):
+    def get_source_urls(self, headless=True):
         """
         Search Google for URLs containing free proxy lists.
 
         :returns: list
         """
         _logger.info('Searching Google for proxy sources..')
-        return self.loop.run_until_complete(self._async_get_source_urls())
+        return self.loop.run_until_complete(self._async_get_source_urls(headless=headless))
 
-    def get_pages_with_proxies(self):
+    def get_pages_with_proxies(self, headless=True):
         """
         Scrape the web for pages containing proxies.
         """
-        urls = self.get_source_urls()
+        urls = self.get_source_urls(headless=headless)
         _logger.info('Found {} source URLs'.format(len(urls)))
         pages = self.get_pages(urls)
         _logger.info('Downloaded {} pages'.format(len(pages)))
@@ -294,7 +293,7 @@ class Client:
         _logger.info('Found {} pages containing proxies'.format(len(pages)))
         return proxy_pages
 
-    def search_proxies(self):
+    def search_proxies(self, headless=True):
         """
         Scrape the web for proxies.
         """
@@ -360,11 +359,11 @@ class Client:
 
         :returns: dict
         """
-        proxies = self.search_proxies()
+        proxies = self.search_proxies(headless=headless)
 
         results = self.test_proxies(proxies, test_url,
                                     headless=headless, concurrency=concurrency,
-                                    exit_success_count=limit)
+                                    selector=selector, exit_success_count=limit)
         proxies = [r for r in results if r['status'] == 'OK']
         return proxies[0:limit]
 
