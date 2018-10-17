@@ -51,22 +51,26 @@ def parse(html_file):
 
 
 @cli.command()
-def sources():
+@click.option('--headless/--no-headless', default=True)
+@click.option('--num', '-n',  help='number of sources to get [1-100]', default=10)
+def sources(headless, num):
     """
     Search Google for proxy sources
     """
     client = proxytools.Client()
-    urls = client.get_source_urls()
+    urls = client.get_source_urls(headless=headless, num=num)
     print(json.dumps(urls, indent=4))
 
 
 @cli.command()
-def search():
+@click.option('--source-num', '-n',  help='number of sources to get from Google [1-100]',
+              default=10)
+def search(source_num):
     """
     Scrape proxies from the web
     """
     client = proxytools.Client()
-    proxies = client.search_proxies()
+    proxies = client.search_proxies(source_num=source_num)
     urls = [str(p) for p in proxies]
     print(json.dumps(urls, indent=4))
 
@@ -108,14 +112,16 @@ def test_from_file(json_file, url, headless, concurrency, selector):
 @click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
 @click.option('--limit', '-l',  help='number of proxies to get', default=1)
 @click.option('--selector', '-s',  help='css selector for page validation')
-def get(test_url, headless, concurrency, limit, selector):
+@click.option('--source-num', '-n',  help='number of sources to get from Google [1-100]',
+              default=10)
+def get(test_url, headless, concurrency, limit, selector, source_num):
     """
     Get a working proxy
     """
     client = proxytools.Client()
     results = client.get_proxies(test_url, headless=headless,
                                  concurrency=concurrency, limit=limit,
-                                 selector=selector)
+                                 selector=selector, source_num=source_num)
     print(json.dumps(results, indent=4))
 
 
