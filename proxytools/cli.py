@@ -19,6 +19,8 @@ _log_levels = [
     'ERROR',
     'CRITICAL'
 ]
+_logger = logging.getLogger(__name__)
+
 
 ####################
 ## Command Groups ##
@@ -30,7 +32,6 @@ def cli(log_level):
     # Configure logging
     level = logging.getLevelName(log_level)
     logging.basicConfig(level=level)
-    _logger = logging.getLogger(__name__)
 
 
 ##############
@@ -75,12 +76,13 @@ def search():
 @click.argument('url', type=click.STRING)
 @click.option('--headless/--no-headless', default=True)
 @click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
-def test(proxy, url, headless, concurrency):
+@click.option('--selector', '-s',  help='css selector for page validation')
+def test(proxy, url, headless, concurrency, selector):
     """
     Test a proxy for a given URL
     """
     client = proxytools.Client()
-    results = client.test_proxies([proxy], url, headless=headless, concurrency=concurrency)
+    results = client.test_proxies([proxy], url, headless=headless, concurrency=concurrency, selector=selector)
     print(json.dumps(results, indent=4))
 
 
@@ -89,15 +91,14 @@ def test(proxy, url, headless, concurrency):
 @click.argument('url', type=click.STRING)
 @click.option('--headless/--no-headless', default=True)
 @click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
-def test_from_file(json_file, url, headless, concurrency):
+@click.option('--selector', '-s',  help='css selector for page validation')
+def test_from_file(json_file, url, headless, concurrency, selector):
     """
-    Test proxies for a given URL
-
-    File expected in JSON format.
+    Test proxies from json file for a given URL
     """
     proxies = json.load(json_file)
     client = proxytools.Client()
-    results = client.test_proxies(proxies, url, headless=headless, concurrency=concurrency)
+    results = client.test_proxies(proxies, url, headless=headless, concurrency=concurrency, selector=selector)
     print(json.dumps(results, indent=4))
 
 
@@ -106,13 +107,15 @@ def test_from_file(json_file, url, headless, concurrency):
 @click.option('--headless/--no-headless', default=True)
 @click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
 @click.option('--limit', '-l',  help='number of proxies to get', default=1)
-def get(test_url, headless, concurrency, limit):
+@click.option('--selector', '-s',  help='css selector for page validation')
+def get(test_url, headless, concurrency, limit, selector):
     """
     Get a working proxy
     """
     client = proxytools.Client()
     results = client.get_proxies(test_url, headless=headless,
-                                 concurrency=concurrency, limit=limit)
+                                 concurrency=concurrency, limit=limit,
+                                 selector=selector)
     print(json.dumps(results, indent=4))
 
 
