@@ -85,7 +85,7 @@ class Client:
         """
         Scrape proxy sources from Google.
 
-        :param num: number of results to fetch
+        :param num: number of results to fetch [1-100]
         :param headless: use chrome in headless mode
 
         :type num: int
@@ -93,6 +93,9 @@ class Client:
 
         :returns: list
         """
+        if num < 1 or num > 100:
+            raise ValueError('source `num` must be between 1-100]')
+
         urls = []
         browser = await pyppeteer.launch({'headless': headless})
         # Create incognito tab
@@ -272,20 +275,35 @@ class Client:
 
         return pages
 
-    def get_source_urls(self, headless=True):
+    def get_source_urls(self, headless=True, num=10):
         """
         Search Google for URLs containing free proxy lists.
+
+        :param num: number of proxy sources to get from Google
+        :param headless: run chrome headless mode
+
+        :type num: int
+        :type headless: bool
 
         :returns: list
         """
         _logger.info('Searching Google for proxy sources..')
-        return self.loop.run_until_complete(self._async_get_source_urls(headless=headless))
+        return self.loop.run_until_complete(
+            self._async_get_source_urls(headless=headless, num=num))
 
-    def get_pages_with_proxies(self, headless=True):
+    def get_pages_with_proxies(self, source_num=10, headless=True):
         """
         Scrape the web for pages containing proxies.
+
+        :param source_num: number of proxy sources to get from Google
+        :param headless: run chrome headless mode
+
+        :type source_num: int
+        :type headless: bool
+
+        :returns: list
         """
-        urls = self.get_source_urls(headless=headless)
+        urls = self.get_source_urls(num=source_num, headless=headless)
         _logger.info('Found {} source URLs'.format(len(urls)))
         pages = self.get_pages(urls)
         _logger.info('Downloaded {} pages'.format(len(pages)))
@@ -293,12 +311,20 @@ class Client:
         _logger.info('Found {} pages containing proxies'.format(len(pages)))
         return proxy_pages
 
-    def search_proxies(self, headless=True):
+    def search_proxies(self, source_num=10, headless=True):
         """
         Scrape the web for proxies.
+
+        :param source_num: number of proxy sources to get from Google
+        :param headless: run chrome headless mode
+
+        :type source_num: int
+        :type headless: bool
+
+        :returns: list
         """
         proxies = []
-        proxy_pages = self.get_pages_with_proxies()
+        proxy_pages = self.get_pages_with_proxies(source_num=source_num, headless=headless)
         for page in proxy_pages:
             proxies.extend(page.proxies())
         _logger.info('Scraped {} proxies'.format(len(proxies)))
@@ -338,7 +364,8 @@ class Client:
                                      headless=headless))
 
     def get_proxies(self, test_url, limit=10, timeout=10,
-                     selector=None, headless=True, concurrency=2):
+                    selector=None, headless=True, concurrency=2,
+                    source_num=10):
         """
         Scrape the web for working proxies.
         Test proxies can load `test_url`.
@@ -349,6 +376,7 @@ class Client:
         :param timeout: seconds to wait before quitting each test
         :param concurrency: number of concurrent chromium tabs to utilise
         :param selector: css selector used to verify proxy is working
+        :param source_num: number of proxy sources to get from Google
 
         :type proxies: list of proxytools.Proxy
         :type test_url: yarl.URL
@@ -356,10 +384,11 @@ class Client:
         :type timeout: int
         :type concurrency: int
         :type selector: str
+        :type source_num: int
 
         :returns: dict
         """
-        proxies = self.search_proxies(headless=headless)
+        proxies = self.search_proxies(source_num=source_num, headless=headless)
 
         results = self.test_proxies(proxies, test_url,
                                     headless=headless, concurrency=concurrency,
