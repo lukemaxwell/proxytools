@@ -8,6 +8,7 @@ import datetime
 import itertools
 import logging
 import pyppeteer
+import re
 import time
 import yarl
 # Proxytools
@@ -55,31 +56,42 @@ class Client:
         args = [iter(iterable)] * n
         return itertools.zip_longest(*args, fillvalue=fillvalue)
 
-    async def _async_get_pages(self, urls, concurrency=10, headless=True):
+    def detect_cloudflare(self, html):
         """
-        Asynchronously get pages from `urls` using chromium.
-
-        :param urls: URLs to get
-        :param concurrency: number of concurrent chromium tabs to utilise
-        :param headless: use chrome in headless mode
-
-        :type urls: list
-        :type concurrency: int
-        :type headless: bool
-
-        :returns: list
+        Return True if html is cloudflare.
         """
-        browser = await pyppeteer.launch({'headless': headless})
-        pages = []
-        # Create incognito tab
-        context = await browser.createIncognitoBrowserContext()
-        for chunk in self._chunker(urls, concurrency):
-            new_pages = await asyncio.gather(*[self.get_page(url, context) for url in chunk],
-                                             return_exceptions=True)
-            pages.extend(new_pages)
-        await context.close()
-        await browser.close()
-        return pages
+        pattern = '.*Checking your browser before accessing.*'
+        if re.search(pattern, html):
+            return True
+        else:
+            return False
+
+    async def _async_get_pages(self, urls, concurrency=10, headless=True, timeout=10):
+         """
+         Asynchronously get pages from `urls` using chromium.
+
+         :param urls: URLs to get
+         :param concurrency: number of concurrent chromium tabs to utilise
+         :param headless: use chrome in headless mode
+
+         :type urls: list
+         :type concurrency: int
+         :type headless: bool
+
+         :returns: list
+         """
+         browser = await pyppeteer.launch({'headless': headless})
+         pages = []
+         # Create incognito tab
+         context = await browser.createIncognitoBrowserContext()
+         for chunk in self._chunker(urls, concurrency):
+             new_pages = await asyncio.gather(
+                 *[self.get_page(url, context, timeout=timeout) for url in chunk if url],
+                 return_exceptions=True)
+             pages.extend(new_pages)
+         await context.close()
+         await browser.close()
+         return pages
 
     async def _async_get_source_urls(self, num=10, headless=True):
         """
@@ -207,11 +219,12 @@ class Client:
                          .format(count, len(proxies), minutes))
             for result in n_results:
                 results.append(result)
-                if result['status'] == 'OK':
-                    status_ok_count += 1
-                if exit_success_count is not None:
-                    if status_ok_count == exit_success_count:
-                        return results
+                if isinstance(result, dict):
+                    if result['status'] == 'OK':
+                        status_ok_count += 1
+                    if exit_success_count is not None:
+                        if status_ok_count == exit_success_count:
+                            return results
             # results.extend(n_results)
         return results
 
@@ -242,7 +255,16 @@ class Client:
         try:
             resp = await asyncio.wait_for(tab.goto(str(url), timeout=timeout*1000), timeout=timeout)
         except asyncio.TimeoutError:
+            _logger.warning('Timed out fetching: {}'.format(str(url)))
             raise TaskTimeout('Navigation timed out')
+
+        # Handle cloudlflare
+        html = await resp.text()
+        if self.detect_cloudflare(html):
+            _logger.info('Cloudflare detected - awaiting navigation')
+            await asyncio.sleep(12)
+            resp = await tab.reload()
+
         _logger.info('Got {}'.format(str(url)))
         if selector:
             await tab.waitForSelector(selector, timeout=timeout*1000)
@@ -252,7 +274,7 @@ class Client:
         page = Page(url=url, html=html)
         return page
 
-    def get_pages(self, urls):
+    def get_pages(self, urls, timeout=10, headless=True):
         """
         Get pages from `urls` using chromium browser.
 
@@ -265,7 +287,7 @@ class Client:
         """
         # Convert url strings in to yarl.URLs
         urls = [yarl.URL(url) for url in urls]
-        results = self.loop.run_until_complete(self._async_get_pages(urls))
+        results = self.loop.run_until_complete(self._async_get_pages(urls, timeout=timeout, headless=headless))
         pages = []
         for result in results:
             if isinstance(result, Page):
@@ -393,6 +415,7 @@ class Client:
         results = self.test_proxies(proxies, test_url,
                                     headless=headless, concurrency=concurrency,
                                     selector=selector, exit_success_count=limit)
+        print(proxies)
         proxies = [r for r in results if r['status'] == 'OK']
         return proxies[0:limit]
 
