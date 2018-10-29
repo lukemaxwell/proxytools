@@ -1,0 +1,9 @@
+asyncio
+beautifulsoup4
+click
+html5lib
+inscriptis
+lxml
+pandas
+pyppeteer
+yarl
