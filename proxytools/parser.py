@@ -5,6 +5,7 @@ Parser module.
 import inscriptis
 import ipaddress
 import logging
+import math
 import pandas
 import re
 import sys
@@ -78,6 +79,7 @@ class ProxyParser():
         matches = self._format_regex_results(matches)
         proxies = []
         for match in matches:
+            _logger.info(match)
             try:
                 proxy = Proxy(host=match[0], port=match[1])
                 proxies.append(proxy)
@@ -100,6 +102,11 @@ class ProxyParser():
 
         try:
             return columns.index('ip address')
+        except ValueError:
+            pass
+
+        try:
+            return columns.index('ip adress')
         except ValueError:
             pass
 
@@ -154,12 +161,14 @@ class ProxyParser():
             try:
                 host_col = self.get_host_column_from_df(df)
             except ColumnNotFound:
-                raise ParserError('Could not parse host column')
+                _logger.debug('Host column not found')
+                continue
 
             try:
                 port_col = self.get_port_column_from_df(df)
             except ColumnNotFound:
-                raise ParserError('Could not parse port column')
+                _logger.debug('Port column not found')
+                continue
 
             # Extract the proxies
             for idx, row in df.iterrows():
@@ -174,10 +183,11 @@ class ProxyParser():
                 except PortNotFound:
                     continue
 
+
                 proxy = Proxy(host=host, port=port)
                 proxies.append(proxy)
 
-            return proxies
+        return proxies
 
 
     def parse_port(self, val):
@@ -199,6 +209,8 @@ class ProxyParser():
                 return int(val)
             except:
                 pass
+        elif isinstance(val, int):
+            return val
 
         _logger.debug('Could not parse port from: {}'.format(val))
         raise PortNotFound('Could not parse port')
@@ -210,6 +222,10 @@ class ProxyParser():
         :param text: the text to parse
         :returns: str
         """
+        if isinstance(val, float):
+            if math.isnan(val):
+                raise IPNotFound('IP not found - NaN value')
+
         try:
             text = str(val)
         except TypeError:
@@ -235,17 +251,23 @@ class ProxyParser():
         :raises: ParserError
         """
         # Try regex first
+        proxies = []
+
         try:
-            return self.parse_proxies_with_regex(html)
+            proxies =  self.parse_proxies_with_regex(html)
         except ParserError:
             pass
 
-        _logger.info('Regex parsing failed, attempting extraction with Pandas')
+        if not proxies:
+            _logger.info('Regex parsing failed, attempting extraction with Pandas')
+            # Try pandas
+            try:
+                proxies =  self.parse_proxies_with_pandas(html)
+            except ParserError:
+                _logger.info('Pandas parsing failed')
+                pass
 
-        # Try pandas
-        try:
-            return  self.parse_proxies_with_pandas(html)
-        except ParserError:
-            pass
-
-        raise ParserError('Could not parse proxies with either regex or Pandas')
+        if not proxies:
+            raise ParserError('Could not parse proxies with either regex or Pandas')
+        else:
+            return proxies
