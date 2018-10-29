@@ -22,6 +22,10 @@ _log_levels = [
 _logger = logging.getLogger(__name__)
 
 
+class CliError(Exception):
+    pass
+
+
 ####################
 ## Command Groups ##
 ####################
@@ -39,14 +43,28 @@ def cli(log_level):
 ##############
 
 @cli.command()
-@click.argument('html_file', type=click.File('r'))
-def parse(html_file):
+@click.option('--input-file', '-f',  type=click.File('r'))
+@click.option('--url', '-u',  type=click.STRING)
+@click.option('--timeout', '-t',  type=click.INT, default=10)
+@click.option('--headless/--no-headless', default=True)
+def parse(input_file, url, timeout, headless):
     """
-    Parse proxies from file
+    Parse proxies from file or URL
     """
-    html = html_file.read()
     parser = proxytools.parser.ProxyParser()
-    proxies = [str(p) for p in parser.parse_proxies(html)]
+    if input_file:
+        html = html_file.read()
+        proxies = [str(p) for p in parser.parse_proxies(html)]
+    elif url:
+        client = proxytools.Client()
+        try:
+            page = client.get_pages([url], timeout=timeout, headless=headless)[0]
+            proxies = [str(p) for p in parser.parse_proxies(page.html)]
+        except IndexError:
+            raise CliError('Could not get page')
+    else:
+        raise CliError('Supply --input-file or --url')
+
     print(json.dumps(proxies, indent=4))
 
 
