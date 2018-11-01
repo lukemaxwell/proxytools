@@ -7,9 +7,9 @@ import click
 import json
 import logging
 import os
+import time
 
 import proxytools
-#from .parser import ProxyParser
 
 _log_levels = [
     'NOTSET',
@@ -128,11 +128,12 @@ def test_from_file(json_file, url, headless, concurrency, selector):
 @click.argument('test-url', type=click.STRING)
 @click.option('--headless/--no-headless', default=True)
 @click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
+@click.option('--geo', '-g', help='perform whois country lookup for proxies', is_flag=True)
 @click.option('--limit', '-l',  help='number of proxies to get', default=1)
 @click.option('--selector', '-s',  help='css selector for page validation')
 @click.option('--source-num', '-n',  help='number of sources to get from Google [1-100]',
               default=10)
-def get(test_url, headless, concurrency, limit, selector, source_num):
+def get(test_url, headless, concurrency, limit, selector, source_num, geo):
     """
     Get a working proxy
     """
@@ -140,6 +141,32 @@ def get(test_url, headless, concurrency, limit, selector, source_num):
     results = client.get_proxies(test_url, headless=headless,
                                  concurrency=concurrency, limit=limit,
                                  selector=selector, source_num=source_num)
+    if geo:
+        wait = 1  #  seconds between WHOIS request
+        for result in results:
+            proxy = proxytools.proxy.Proxy.from_string(result['proxy'])
+            country = proxy.country()
+            result['country'] = country
+            time.sleep(wait)
+    print(json.dumps(results, indent=4))
+
+
+@cli.command()
+@click.option('--input-file', '-f',  type=click.File('r'))
+@click.option('--ip', '-u',  type=click.STRING)
+@click.option('--country', is_flag=True)
+def whois(input_file, ip, country):
+    """
+    Perform WHOIS lookup.
+    """
+    client = proxytools.Client()
+    if input_file:
+        ips = html_file.read().splitlines()
+    elif ip:
+        ips = [ip]
+    else:
+        raise CliError('Supply --input-file or --ip')
+    results = client.whois(ips)
     print(json.dumps(results, indent=4))
 
 

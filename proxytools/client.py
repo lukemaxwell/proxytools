@@ -9,6 +9,8 @@ import itertools
 import logging
 import pyppeteer
 import re
+import requests
+import socket
 import time
 import yarl
 # Proxytools
@@ -38,6 +40,8 @@ class Client:
     """
     def __init__(self):
         self.loop = asyncio.get_event_loop()
+        self.geoip_url = yarl.URL('http://ip-api.com/json/')
+        self.whois_server = 'whois.apnic.net'
 
     def _chunker(self, iterable, n, fillvalue=None):
         """
@@ -415,7 +419,5 @@ class Client:
         results = self.test_proxies(proxies, test_url,
                                     headless=headless, concurrency=concurrency,
                                     selector=selector, exit_success_count=limit)
-        print(proxies)
         proxies = [r for r in results if r['status'] == 'OK']
         return proxies[0:limit]
-
