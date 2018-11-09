@@ -47,7 +47,10 @@ def cli(log_level):
 @click.option('--url', '-u',  type=click.STRING)
 @click.option('--timeout', '-t',  type=click.INT, default=10)
 @click.option('--headless/--no-headless', default=True)
-def parse(input_file, url, timeout, headless):
+@click.option('--bin-path',
+              help='Path to chromium executuable',
+              type=click.Path(exists=True))
+def parse(input_file, url, timeout, headless, bin_path):
     """
     Parse proxies from file or URL
     """
@@ -58,7 +61,8 @@ def parse(input_file, url, timeout, headless):
     elif url:
         client = proxytools.Client()
         try:
-            page = client.get_pages([url], timeout=timeout, headless=headless)[0]
+            page = client.get_pages(
+                [url], timeout=timeout, headless=headless, bin_path=bin_path)[0]
             proxies = [str(p) for p in parser.parse_proxies(page.html)]
         except IndexError:
             raise CliError('Could not get page')
@@ -71,24 +75,30 @@ def parse(input_file, url, timeout, headless):
 @cli.command()
 @click.option('--headless/--no-headless', default=True)
 @click.option('--num', '-n',  help='number of sources to get [1-100]', default=10)
-def sources(headless, num):
+@click.option('--bin-path',
+              help='Path to chromium executuable',
+              type=click.Path(exists=True))
+def sources(headless, num, bin_path):
     """
     Search Google for proxy sources
     """
     client = proxytools.Client()
-    urls = client.get_source_urls(headless=headless, num=num)
+    urls = client.get_source_urls(headless=headless, num=num, bin_path=bin_path)
     print(json.dumps(urls, indent=4))
 
 
 @cli.command()
 @click.option('--source-num', '-n',  help='number of sources to get from Google [1-100]',
               default=10)
-def search(source_num):
+@click.option('--bin-path',
+              help='Path to chromium executuable',
+              type=click.Path(exists=True))
+def search(source_num, bin_path):
     """
     Scrape proxies from the web
     """
     client = proxytools.Client()
-    proxies = client.search_proxies(source_num=source_num)
+    proxies = client.search_proxies(source_num=source_num, bin_path=bin_path)
     urls = [str(p) for p in proxies]
     print(json.dumps(urls, indent=4))
 
@@ -99,7 +109,10 @@ def search(source_num):
 @click.option('--headless/--no-headless', default=True)
 @click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
 @click.option('--selector', '-s',  help='css selector for page validation')
-def test(proxy, url, headless, concurrency, selector):
+@click.option('--bin-path',
+              help='Path to chromium executuable',
+              type=click.Path(exists=True))
+def test(proxy, url, headless, concurrency, selector, bin_path):
     """
     Test a proxy for a given URL
     """
@@ -114,13 +127,21 @@ def test(proxy, url, headless, concurrency, selector):
 @click.option('--headless/--no-headless', default=True)
 @click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
 @click.option('--selector', '-s',  help='css selector for page validation')
-def test_from_file(json_file, url, headless, concurrency, selector):
+@click.option('--bin-path',
+              help='Path to chromium executuable',
+              type=click.Path(exists=True))
+def test_from_file(json_file, url, headless, concurrency, selector, bin_path):
     """
     Test proxies from json file for a given URL
     """
     proxies = json.load(json_file)
     client = proxytools.Client()
-    results = client.test_proxies(proxies, url, headless=headless, concurrency=concurrency, selector=selector)
+    results = client.test_proxies(proxies,
+                                  url,
+                                  headless=headless,
+                                  concurrency=concurrency,
+                                  selector=selector,
+                                  bin_path=bin_path)
     print(json.dumps(results, indent=4))
 
 
@@ -133,14 +154,17 @@ def test_from_file(json_file, url, headless, concurrency, selector):
 @click.option('--selector', '-s',  help='css selector for page validation')
 @click.option('--source-num', '-n',  help='number of sources to get from Google [1-100]',
               default=10)
-def get(test_url, headless, concurrency, limit, selector, source_num, geo):
+@click.option('--bin-path',
+              help='Path to chromium executuable',
+              type=click.Path(exists=True))
+def get(test_url, headless, concurrency, limit, selector, source_num, geo, bin_path):
     """
     Get a working proxy
     """
     client = proxytools.Client()
     results = client.get_proxies(test_url, headless=headless,
                                  concurrency=concurrency, limit=limit,
-                                 selector=selector, source_num=source_num)
+                                 selector=selector, source_num=source_num, bin_path=bin_path)
     if geo:
         wait = 1  #  seconds between WHOIS request
         for result in results:
@@ -148,25 +172,6 @@ def get(test_url, headless, concurrency, limit, selector, source_num, geo):
             country = proxy.country()
             result['country'] = country
             time.sleep(wait)
-    print(json.dumps(results, indent=4))
-
-
-@cli.command()
-@click.option('--input-file', '-f',  type=click.File('r'))
-@click.option('--ip', '-u',  type=click.STRING)
-@click.option('--country', is_flag=True)
-def whois(input_file, ip, country):
-    """
-    Perform WHOIS lookup.
-    """
-    client = proxytools.Client()
-    if input_file:
-        ips = html_file.read().splitlines()
-    elif ip:
-        ips = [ip]
-    else:
-        raise CliError('Supply --input-file or --ip')
-    results = client.whois(ips)
     print(json.dumps(results, indent=4))
 
 
