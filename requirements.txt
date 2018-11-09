@@ -6,4 +6,5 @@ inscriptis
 lxml
 pandas
 pyppeteer
+requirements
 yarl
