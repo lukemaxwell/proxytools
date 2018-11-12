@@ -72,42 +72,52 @@ class Client:
 
     async def _async_get_pages(self, urls, concurrency=10, headless=True,
                                timeout=10, bin_path=None, chrome_args=[]):
-         """
-         Asynchronously get pages from `urls` using chromium.
+        """
+        Asynchronously get pages from `urls` using chromium.
 
-         :param urls: URLs to get
-         :param concurrency: number of concurrent chromium tabs to utilise
-         :param headless: use chrome in headless mode
-         :param bin_path: path to chrome executable
-         :param chrome_args: headless chrome args
+        :param urls: URLs to get
+        :param concurrency: number of concurrent chromium tabs to utilise
+        :param headless: use chrome in headless mode
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chrome args
 
-         :type urls: list
-         :type concurrency: int
-         :type headless: bool
-         :type bin_path: str
-         :type chrome_args: list
+        :type urls: list
+        :type concurrency: int
+        :type headless: bool
+        :type bin_path: str
+        :type chrome_args: list
 
-         :returns: list
-         """
-         kwargs = {
-             'headless': headless,
-             'args': chrome_args
-         }
-         if bin_path:
-             kwargs['executablePath'] = bin_path
-         browser = await pyppeteer.launch(kwargs)
-         # browser = await pyppeteer.launch({'headless': headless})
-         pages = []
-         # Create incognito tab
-         context = await browser.createIncognitoBrowserContext()
-         for chunk in self._chunker(urls, concurrency):
-             new_pages = await asyncio.gather(
-                 *[self.get_page(url, context, timeout=timeout) for url in chunk if url],
-                 return_exceptions=True)
-             pages.extend(new_pages)
-         await context.close()
-         await browser.close()
-         return pages
+        :returns: list
+        """
+        kwargs = {
+            'headless': headless,
+            'args': chrome_args
+        }
+        if bin_path:
+            kwargs['executablePath'] = bin_path
+        browser = await pyppeteer.launch(kwargs)
+        # browser = await pyppeteer.launch({'headless': headless})
+        pages = []
+        # Create incognito tab
+        context = await browser.createIncognitoBrowserContext()
+        for chunk in self._chunker(urls, concurrency):
+            new_pages = await asyncio.gather(
+                *[self.get_page(url, context, timeout=timeout) for url in chunk if url],
+                return_exceptions=True)
+            pages.extend(new_pages)
+
+        # Cleanup
+        try:
+            await context.close()
+        except:
+            pass
+
+        try:
+            await browser.close()
+        except:
+            pass
+
+        return pages
 
     async def _async_get_source_urls(self, num=10, headless=True, bin_path=None, chrome_args=[]):
         """
@@ -149,9 +159,21 @@ class Client:
             url =  await prop.jsonValue()
             urls.append(url)
 
-        await tab.close()
-        await context.close()
-        await browser.close()
+        # Cleanup
+        try:
+            await tab.close()
+        except:
+            pass
+
+        try:
+            await context.close()
+        except:
+            pass
+
+        try:
+            await browser.close()
+        except:
+            pass
 
         return urls
 
@@ -205,8 +227,16 @@ class Client:
         except Exception as e:
             status = str(e)
 
-        await context.close()
-        await browser.close()
+        # Cleanup
+        try:
+            await context.close()
+        except:
+            pass
+
+        try:
+            await browser.close()
+        except:
+            pass
 
         return {'proxy': str(proxy), 'status': status}
 
@@ -312,7 +342,10 @@ class Client:
             await tab.waitForSelector(selector, timeout=timeout*1000)
         html = await resp.text()
         # Close page tab
-        await tab.close()
+        try:
+            await tab.close()
+        except:
+            pass
         page = Page(url=url, html=html)
         return page
 
