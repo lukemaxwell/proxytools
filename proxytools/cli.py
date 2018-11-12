@@ -63,7 +63,7 @@ def parse(input_file, url, timeout, headless, bin_path, chrome_args):
     for arg in chrome_args:
         if not arg.startswith('--'):
             arg = '--{}'.format(arg)
-            _args.append(arg)
+        _args.append(arg)
     chrome_args = _args
 
     if input_file:
@@ -101,7 +101,7 @@ def sources(headless, num, bin_path, chrome_args):
     for arg in chrome_args:
         if not arg.startswith('--'):
             arg = '--{}'.format(arg)
-            _args.append(arg)
+        _args.append(arg)
     chrome_args = _args
     client = proxytools.Client()
     urls = client.get_source_urls(headless=headless, num=num, bin_path=bin_path, chrome_args=chrome_args)
@@ -126,7 +126,7 @@ def search(source_num, bin_path, chrome_args):
     for arg in chrome_args:
         if not arg.startswith('--'):
             arg = '--{}'.format(arg)
-            _args.append(arg)
+        _args.append(arg)
     chrome_args = _args
     client = proxytools.Client()
     proxies = client.search_proxies(source_num=source_num, bin_path=bin_path, chrome_args=chrome_args)
@@ -155,7 +155,7 @@ def test(proxy, url, headless, concurrency, selector, bin_path, chrome_args):
     for arg in chrome_args:
         if not arg.startswith('--'):
             arg = '--{}'.format(arg)
-            _args.append(arg)
+        _args.append(arg)
     client = proxytools.Client()
     results = client.test_proxies([proxy], url, headless=headless, concurrency=concurrency, selector=selector)
     print(json.dumps(results, indent=4))
@@ -182,7 +182,7 @@ def test_from_file(json_file, url, headless, concurrency, selector, bin_path, ch
     for arg in chrome_args:
         if not arg.startswith('--'):
             arg = '--{}'.format(arg)
-            _args.append(arg)
+        _args.append(arg)
     proxies = json.load(json_file)
     client = proxytools.Client()
     results = client.test_proxies(proxies,
@@ -219,7 +219,7 @@ def get(test_url, headless, concurrency, limit, selector, source_num, geo, bin_p
     for arg in chrome_args:
         if not arg.startswith('--'):
             arg = '--{}'.format(arg)
-            _args.append(arg)
+        _args.append(arg)
     client = proxytools.Client()
     results = client.get_proxies(test_url,
                                  headless=headless,
