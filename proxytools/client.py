@@ -70,21 +70,33 @@ class Client:
         else:
             return False
 
-    async def _async_get_pages(self, urls, concurrency=10, headless=True, timeout=10):
+    async def _async_get_pages(self, urls, concurrency=10, headless=True,
+                               timeout=10, bin_path=None, chrome_args=[]):
          """
          Asynchronously get pages from `urls` using chromium.
 
          :param urls: URLs to get
          :param concurrency: number of concurrent chromium tabs to utilise
          :param headless: use chrome in headless mode
+         :param bin_path: path to chrome executable
+         :param chrome_args: headless chrome args
 
          :type urls: list
          :type concurrency: int
          :type headless: bool
+         :type bin_path: str
+         :type chrome_args: list
 
          :returns: list
          """
-         browser = await pyppeteer.launch({'headless': headless})
+         kwargs = {
+             'headless': headless,
+             'args': chrome_args
+         }
+         if bin_path:
+             kwargs['executablePath'] = bin_path
+         browser = await pyppeteer.launch(kwargs)
+         # browser = await pyppeteer.launch({'headless': headless})
          pages = []
          # Create incognito tab
          context = await browser.createIncognitoBrowserContext()
@@ -97,15 +109,19 @@ class Client:
          await browser.close()
          return pages
 
-    async def _async_get_source_urls(self, num=10, headless=True):
+    async def _async_get_source_urls(self, num=10, headless=True, bin_path=None, chrome_args=[]):
         """
         Scrape proxy sources from Google.
 
         :param num: number of results to fetch [1-100]
         :param headless: use chrome in headless mode
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chrome args
 
         :type num: int
         :type headless: bool
+        :type bin_path: str
+        :type chrome_args: list
 
         :returns: list
         """
@@ -113,7 +129,14 @@ class Client:
             raise ValueError('source `num` must be between 1-100]')
 
         urls = []
-        browser = await pyppeteer.launch({'headless': headless})
+        kwargs = {
+            'headless': headless,
+            'args': chrome_args
+        }
+        if bin_path:
+            kwargs['executablePath'] = bin_path
+        browser = await pyppeteer.launch(kwargs)
+        # browser = await pyppeteer.launch({'headless': headless})
         # Create incognito tab
         context = await browser.createIncognitoBrowserContext()
         tab = await context.newPage()
@@ -137,6 +160,8 @@ class Client:
                                 url,
                                 headless=True,
                                 timeout=10,
+                                bin_path=None,
+                                chrome_args=[]
                                 selector=None):
         """
         Test `proxy` by attempting to load `url'.
@@ -146,25 +171,32 @@ class Client:
         :param selector: css selector used to verify page load
         :param headless: run chrome headless mode
         :param timeout: the async task timeout
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chromium args
 
         :type proxy: proxytools.Proxy
         :type url: yarl.URL
         :type selector: str
         :type headless: bool
         :type timeout: int
+        :type bin_path: str
+        :type chrome_args: list
 
         :returns: dict
         """
-        browser = await pyppeteer.launch(
-            {
-                'headless': headless,
-                'args': [
-                    '--proxy-server=http={}'.format(str(proxy)),
-                    '--proxy-server=https={}'.format(str(proxy)),
-                ]
+        chrome_args.append('--proxy-server=http={}'.format(str(proxy)))
+        chrome_args.append('--proxy-server=https={}'.format(str(proxy)))
 
-            }
-        )
+        kwargs = {
+            'headless': headless,
+            'args':  chrome_args
+        }
+
+        if bin_path:
+            kwargs['executablePath'] = bin_path
+
+        browser = await pyppeteer.launch(kwargs)
+
         # Create incognito tab
         context = await browser.createIncognitoBrowserContext()
         try:
@@ -185,7 +217,9 @@ class Client:
                                   timeout=10,
                                   concurrency=1,
                                   exit_success_count=None,
-                                  selector=None):
+                                  selector=None,
+                                  bin_path=None,
+                                  chrome_args=[]):
         """
         Test `proxies` by attempting to load `url' and awaiting `selector`.
 
@@ -196,6 +230,8 @@ class Client:
         :param concurrency: number of concurrent chromium tabs to utilise
         :param selector: css selector used to verify page load
         :param exit_success_count: exit when number of working proxies is reached
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chromium args
 
         :type proxies: list of proxytools.Proxy
         :type url: yarl.URL
@@ -204,6 +240,8 @@ class Client:
         :type concurrency: int
         :type selector: str
         :type exit_success_count: int
+        :type bin_path: str
+        :type chrome_args: list
 
         :returns: dict
         """
@@ -215,7 +253,7 @@ class Client:
             n_results = await asyncio.gather(
                 *[self._async_test_proxy(
                     proxy, url, headless=headless,
-                    timeout=timeout, selector=selector) for proxy in chunk],
+                    timeout=timeout, selector=selector, bin_path=bin_path, chrome_args=chrome_args) for proxy in chunk],
                 return_exceptions=True)
             count += len(chunk)
             minutes = round((datetime.datetime.now() - start_ts).seconds / 60, 2)
@@ -278,7 +316,7 @@ class Client:
         page = Page(url=url, html=html)
         return page
 
-    def get_pages(self, urls, timeout=10, headless=True):
+    def get_pages(self, urls, timeout=10, headless=True, bin_path=None, chrome_args=[]):
         """
         Get pages from `urls` using chromium browser.
 
@@ -286,12 +324,23 @@ class Client:
         tabs.
 
         :param urls: list of URL strings
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chromium args
+
         :type urls: list
+        :type bin_path: str
+        :type chrome_args: list
+
         :returns: proxytools.page.Page
         """
         # Convert url strings in to yarl.URLs
         urls = [yarl.URL(url) for url in urls]
-        results = self.loop.run_until_complete(self._async_get_pages(urls, timeout=timeout, headless=headless))
+        results = self.loop.run_until_complete(
+            self._async_get_pages(urls,
+                                  timeout=timeout,
+                                  headless=headless,
+                                  bin_path=bin_path,
+                                  chrome_args=chrome_args))
         pages = []
         for result in results:
             if isinstance(result, Page):
@@ -301,35 +350,43 @@ class Client:
 
         return pages
 
-    def get_source_urls(self, headless=True, num=10):
+    def get_source_urls(self, headless=True, num=10, bin_path=None, chrome_args=[]):
         """
         Search Google for URLs containing free proxy lists.
 
         :param num: number of proxy sources to get from Google
         :param headless: run chrome headless mode
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chromium args
 
         :type num: int
         :type headless: bool
+        :type bin_path: str
+        :type chrome_args: list
 
         :returns: list
         """
         _logger.info('Searching Google for proxy sources..')
         return self.loop.run_until_complete(
-            self._async_get_source_urls(headless=headless, num=num))
+            self._async_get_source_urls(headless=headless, num=num, bin_path=bin_path, chrome_args=chrome_args))
 
-    def get_pages_with_proxies(self, source_num=10, headless=True):
+    def get_pages_with_proxies(self, source_num=10, headless=True, bin_path=None, chrome_args=[]):
         """
         Scrape the web for pages containing proxies.
 
         :param source_num: number of proxy sources to get from Google
         :param headless: run chrome headless mode
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chromium args
 
         :type source_num: int
         :type headless: bool
+        :type bin_path: str
+        :type chrome_args: list
 
         :returns: list
         """
-        urls = self.get_source_urls(num=source_num, headless=headless)
+        urls = self.get_source_urls(num=source_num, headless=headless, bin_path=bin_path, chrome_args=chrome_args)
         _logger.info('Found {} source URLs'.format(len(urls)))
         pages = self.get_pages(urls)
         _logger.info('Downloaded {} pages'.format(len(pages)))
@@ -337,20 +394,27 @@ class Client:
         _logger.info('Found {} pages containing proxies'.format(len(pages)))
         return proxy_pages
 
-    def search_proxies(self, source_num=10, headless=True):
+    def search_proxies(self, source_num=10, headless=True, bin_path=None, chrome_args=[]):
         """
         Scrape the web for proxies.
 
         :param source_num: number of proxy sources to get from Google
         :param headless: run chrome headless mode
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chromium args
 
         :type source_num: int
         :type headless: bool
+        :type bin_path: str
+        :type chrome_args: list
 
         :returns: list
         """
         proxies = []
-        proxy_pages = self.get_pages_with_proxies(source_num=source_num, headless=headless)
+        proxy_pages = self.get_pages_with_proxies(source_num=source_num,
+                                                  headless=headless,
+                                                  bin_path=bin_path,
+                                                  chrome_args=chrome_args)
         for page in proxy_pages:
             proxies.extend(page.proxies())
         _logger.info('Scraped {} proxies'.format(len(proxies)))
@@ -358,7 +422,7 @@ class Client:
 
     def test_proxies(self, proxies, url, timeout=10,
                      selector=None, headless=True, concurrency=2,
-                     exit_success_count=None):
+                     exit_success_count=None, bin_path=None, chrome_args=[]):
         """
         Test proxies can load page at `url`.
 
@@ -369,6 +433,8 @@ class Client:
         :param concurrency: number of concurrent chromium tabs to utilise
         :param selector: css selector used to verify page load
         :param exit_success_count: exit when number of working proxies is reached
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chromium args
 
         :type proxies: list of proxytools.Proxy
         :type url: yarl.URL
@@ -377,6 +443,8 @@ class Client:
         :type concurrency: int
         :type selector: str
         :type exit_success_count: int
+        :type bin_path: str
+        :type chrome_args: list
 
         :returns: dict
         """
@@ -387,11 +455,13 @@ class Client:
                                      concurrency=concurrency,
                                      selector=selector,
                                      exit_success_count=exit_success_count,
-                                     headless=headless))
+                                     headless=headless,
+                                     bin_path=bin_path,
+                                     chrome_args=chrome_args))
 
     def get_proxies(self, test_url, limit=10, timeout=10,
                     selector=None, headless=True, concurrency=2,
-                    source_num=10):
+                    source_num=10, bin_path=None, chrome_args=[]):
         """
         Scrape the web for working proxies.
         Test proxies can load `test_url`.
@@ -403,6 +473,8 @@ class Client:
         :param concurrency: number of concurrent chromium tabs to utilise
         :param selector: css selector used to verify proxy is working
         :param source_num: number of proxy sources to get from Google
+        :param bin_path: path to chrome executable
+        :param chrome_args: headless chromium args
 
         :type proxies: list of proxytools.Proxy
         :type test_url: yarl.URL
@@ -411,13 +483,22 @@ class Client:
         :type concurrency: int
         :type selector: str
         :type source_num: int
+        :type bin_path: str
+        :type chrome_args: list
 
         :returns: dict
         """
-        proxies = self.search_proxies(source_num=source_num, headless=headless)
+        proxies = self.search_proxies(source_num=source_num,
+                                      headless=headless,
+                                      bin_path=bin_path,
+                                      chrome_args=chrome_args)
 
-        results = self.test_proxies(proxies, test_url,
-                                    headless=headless, concurrency=concurrency,
-                                    selector=selector, exit_success_count=limit)
+        results = self.test_proxies(proxies,
+                                    test_url,
+                                    headless=headless,
+                                    concurrency=concurrency,
+                                    selector=selector,
+                                    exit_success_count=limit,
+                                    bin_path=bin_path)
         proxies = [r for r in results if r['status'] == 'OK']
         return proxies[0:limit]
