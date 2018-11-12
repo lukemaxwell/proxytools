@@ -52,7 +52,8 @@ def cli(log_level):
               type=click.Path(exists=True))
 @click.option('--chrome-args',
               help='chromium args (comma separated)',
-              type=str)
+              type=str,
+              default='')
 def parse(input_file, url, timeout, headless, bin_path, chrome_args):
     """
     Parse proxies from file or URL
@@ -61,9 +62,10 @@ def parse(input_file, url, timeout, headless, bin_path, chrome_args):
     chrome_args = chrome_args.split(',')
     _args = []
     for arg in chrome_args:
-        if not arg.startswith('--'):
-            arg = '--{}'.format(arg)
-        _args.append(arg)
+        if len(arg) > 0:
+            if not arg.startswith('--'):
+                arg = '--{}'.format(arg)
+            _args.append(arg)
     chrome_args = _args
 
     if input_file:
@@ -91,7 +93,8 @@ def parse(input_file, url, timeout, headless, bin_path, chrome_args):
               type=click.Path(exists=True))
 @click.option('--chrome-args',
               help='chromium args (comma separated)',
-              type=str)
+              type=str,
+              default='')
 def sources(headless, num, bin_path, chrome_args):
     """
     Search Google for proxy sources
@@ -99,9 +102,10 @@ def sources(headless, num, bin_path, chrome_args):
     chrome_args = chrome_args.split(',')
     _args = []
     for arg in chrome_args:
-        if not arg.startswith('--'):
-            arg = '--{}'.format(arg)
-        _args.append(arg)
+        if len(arg) > 0:
+            if not arg.startswith('--'):
+                arg = '--{}'.format(arg)
+            _args.append(arg)
     chrome_args = _args
     client = proxytools.Client()
     urls = client.get_source_urls(headless=headless, num=num, bin_path=bin_path, chrome_args=chrome_args)
@@ -116,7 +120,8 @@ def sources(headless, num, bin_path, chrome_args):
               type=click.Path(exists=True))
 @click.option('--chrome-args',
               help='chromium args (comma separated)',
-              type=str)
+              type=str,
+              default='')
 def search(source_num, bin_path, chrome_args):
     """
     Scrape proxies from the web
@@ -124,9 +129,10 @@ def search(source_num, bin_path, chrome_args):
     chrome_args = chrome_args.split(',')
     _args = []
     for arg in chrome_args:
-        if not arg.startswith('--'):
-            arg = '--{}'.format(arg)
-        _args.append(arg)
+        if len(arg) > 0:
+            if not arg.startswith('--'):
+                arg = '--{}'.format(arg)
+            _args.append(arg)
     chrome_args = _args
     client = proxytools.Client()
     proxies = client.search_proxies(source_num=source_num, bin_path=bin_path, chrome_args=chrome_args)
@@ -145,7 +151,8 @@ def search(source_num, bin_path, chrome_args):
               type=click.Path(exists=True))
 @click.option('--chrome-args',
               help='chromium args (comma separated)',
-              type=str)
+              type=str,
+              default='')
 def test(proxy, url, headless, concurrency, selector, bin_path, chrome_args):
     """
     Test a proxy for a given URL
@@ -153,9 +160,10 @@ def test(proxy, url, headless, concurrency, selector, bin_path, chrome_args):
     chrome_args = chrome_args.split(',')
     _args = []
     for arg in chrome_args:
-        if not arg.startswith('--'):
-            arg = '--{}'.format(arg)
-        _args.append(arg)
+        if len(arg) > 0:
+            if not arg.startswith('--'):
+                arg = '--{}'.format(arg)
+            _args.append(arg)
     client = proxytools.Client()
     results = client.test_proxies([proxy], url, headless=headless, concurrency=concurrency, selector=selector)
     print(json.dumps(results, indent=4))
@@ -172,7 +180,8 @@ def test(proxy, url, headless, concurrency, selector, bin_path, chrome_args):
               type=click.Path(exists=True))
 @click.option('--chrome-args',
               help='chromium args (comma separated)',
-              type=str)
+              type=str,
+              default='')
 def test_from_file(json_file, url, headless, concurrency, selector, bin_path, chrome_args):
     """
     Test proxies from json file for a given URL
@@ -180,9 +189,10 @@ def test_from_file(json_file, url, headless, concurrency, selector, bin_path, ch
     chrome_args = chrome_args.split(',')
     _args = []
     for arg in chrome_args:
-        if not arg.startswith('--'):
-            arg = '--{}'.format(arg)
-        _args.append(arg)
+        if len(arg) > 0:
+            if not arg.startswith('--'):
+                arg = '--{}'.format(arg)
+            _args.append(arg)
     proxies = json.load(json_file)
     client = proxytools.Client()
     results = client.test_proxies(proxies,
@@ -209,7 +219,8 @@ def test_from_file(json_file, url, headless, concurrency, selector, bin_path, ch
               type=click.Path(exists=True))
 @click.option('--chrome-args',
               help='chromium args (comma separated)',
-              type=str)
+              type=str,
+              default='')
 def get(test_url, headless, concurrency, limit, selector, source_num, geo, bin_path, chrome_args):
     """
     Get a working proxy
@@ -217,9 +228,10 @@ def get(test_url, headless, concurrency, limit, selector, source_num, geo, bin_p
     chrome_args = chrome_args.split(',')
     _args = []
     for arg in chrome_args:
-        if not arg.startswith('--'):
-            arg = '--{}'.format(arg)
-        _args.append(arg)
+        if len(arg) > 0:
+            if not arg.startswith('--'):
+                arg = '--{}'.format(arg)
+            _args.append(arg)
     client = proxytools.Client()
     results = client.get_proxies(test_url,
                                  headless=headless,
