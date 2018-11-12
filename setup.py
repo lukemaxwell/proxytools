@@ -30,6 +30,7 @@ setup(
         'lxml',
         'pandas',
         'pyppeteer',
+        'requests',
         'yarl',
     ],
     classifiers=[

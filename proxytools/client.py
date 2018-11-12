@@ -161,7 +161,7 @@ class Client:
                                 headless=True,
                                 timeout=10,
                                 bin_path=None,
-                                chrome_args=[]
+                                chrome_args=[],
                                 selector=None):
         """
         Test `proxy` by attempting to load `url'.
@@ -331,6 +331,9 @@ class Client:
         :type bin_path: str
         :type chrome_args: list
 
+        :type urls: list
+        :type bin_path: str
+
         :returns: proxytools.page.Page
         """
         # Convert url strings in to yarl.URLs
@@ -499,6 +502,7 @@ class Client:
                                     concurrency=concurrency,
                                     selector=selector,
                                     exit_success_count=limit,
-                                    bin_path=bin_path)
+                                    bin_path=bin_path,
+                                    chrome_args=chrome_args)
         proxies = [r for r in results if r['status'] == 'OK']
         return proxies[0:limit]
