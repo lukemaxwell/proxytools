@@ -391,7 +391,7 @@ class Client:
         """
         urls = self.get_source_urls(num=source_num, headless=headless, bin_path=bin_path, chrome_args=chrome_args)
         _logger.info('Found {} source URLs'.format(len(urls)))
-        pages = self.get_pages(urls)
+        pages = self.get_pages(urls, headless=headless, bin_path=bin_path, chrome_args=chrome_args)
         _logger.info('Downloaded {} pages'.format(len(pages)))
         proxy_pages = [page for page in pages if page.contains_ips()]
         _logger.info('Found {} pages containing proxies'.format(len(pages)))
