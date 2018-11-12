@@ -50,11 +50,22 @@ def cli(log_level):
 @click.option('--bin-path',
               help='Path to chromium executuable',
               type=click.Path(exists=True))
-def parse(input_file, url, timeout, headless, bin_path):
+@click.option('--chrome-args',
+              help='chromium args (comma separated)',
+              type=str)
+def parse(input_file, url, timeout, headless, bin_path, chrome_args):
     """
     Parse proxies from file or URL
     """
     parser = proxytools.parser.ProxyParser()
+    chrome_args = chrome_args.split(',')
+    _args = []
+    for arg in chrome_args:
+        if not arg.startswith('--'):
+            arg = '--{}'.format(arg)
+            _args.append(arg)
+    chrome_args = _args
+
     if input_file:
         html = html_file.read()
         proxies = [str(p) for p in parser.parse_proxies(html)]
@@ -62,7 +73,7 @@ def parse(input_file, url, timeout, headless, bin_path):
         client = proxytools.Client()
         try:
             page = client.get_pages(
-                [url], timeout=timeout, headless=headless, bin_path=bin_path)[0]
+                [url], timeout=timeout, headless=headless, bin_path=bin_path, chrome_args=chrome_args)[0]
             proxies = [str(p) for p in parser.parse_proxies(page.html)]
         except IndexError:
             raise CliError('Could not get page')
@@ -78,12 +89,22 @@ def parse(input_file, url, timeout, headless, bin_path):
 @click.option('--bin-path',
               help='Path to chromium executuable',
               type=click.Path(exists=True))
-def sources(headless, num, bin_path):
+@click.option('--chrome-args',
+              help='chromium args (comma separated)',
+              type=str)
+def sources(headless, num, bin_path, chrome_args):
     """
     Search Google for proxy sources
     """
+    chrome_args = chrome_args.split(',')
+    _args = []
+    for arg in chrome_args:
+        if not arg.startswith('--'):
+            arg = '--{}'.format(arg)
+            _args.append(arg)
+    chrome_args = _args
     client = proxytools.Client()
-    urls = client.get_source_urls(headless=headless, num=num, bin_path=bin_path)
+    urls = client.get_source_urls(headless=headless, num=num, bin_path=bin_path, chrome_args=chrome_args)
     print(json.dumps(urls, indent=4))
 
 
@@ -93,12 +114,22 @@ def sources(headless, num, bin_path):
 @click.option('--bin-path',
               help='Path to chromium executuable',
               type=click.Path(exists=True))
-def search(source_num, bin_path):
+@click.option('--chrome-args',
+              help='chromium args (comma separated)',
+              type=str)
+def search(source_num, bin_path, chrome_args):
     """
     Scrape proxies from the web
     """
+    chrome_args = chrome_args.split(',')
+    _args = []
+    for arg in chrome_args:
+        if not arg.startswith('--'):
+            arg = '--{}'.format(arg)
+            _args.append(arg)
+    chrome_args = _args
     client = proxytools.Client()
-    proxies = client.search_proxies(source_num=source_num, bin_path=bin_path)
+    proxies = client.search_proxies(source_num=source_num, bin_path=bin_path, chrome_args=chrome_args)
     urls = [str(p) for p in proxies]
     print(json.dumps(urls, indent=4))
 
@@ -112,10 +143,19 @@ def search(source_num, bin_path):
 @click.option('--bin-path',
               help='Path to chromium executuable',
               type=click.Path(exists=True))
-def test(proxy, url, headless, concurrency, selector, bin_path):
+@click.option('--chrome-args',
+              help='chromium args (comma separated)',
+              type=str)
+def test(proxy, url, headless, concurrency, selector, bin_path, chrome_args):
     """
     Test a proxy for a given URL
     """
+    chrome_args = chrome_args.split(',')
+    _args = []
+    for arg in chrome_args:
+        if not arg.startswith('--'):
+            arg = '--{}'.format(arg)
+            _args.append(arg)
     client = proxytools.Client()
     results = client.test_proxies([proxy], url, headless=headless, concurrency=concurrency, selector=selector)
     print(json.dumps(results, indent=4))
@@ -130,10 +170,19 @@ def test(proxy, url, headless, concurrency, selector, bin_path):
 @click.option('--bin-path',
               help='Path to chromium executuable',
               type=click.Path(exists=True))
-def test_from_file(json_file, url, headless, concurrency, selector, bin_path):
+@click.option('--chrome-args',
+              help='chromium args (comma separated)',
+              type=str)
+def test_from_file(json_file, url, headless, concurrency, selector, bin_path, chrome_args):
     """
     Test proxies from json file for a given URL
     """
+    chrome_args = chrome_args.split(',')
+    _args = []
+    for arg in chrome_args:
+        if not arg.startswith('--'):
+            arg = '--{}'.format(arg)
+            _args.append(arg)
     proxies = json.load(json_file)
     client = proxytools.Client()
     results = client.test_proxies(proxies,
@@ -141,7 +190,8 @@ def test_from_file(json_file, url, headless, concurrency, selector, bin_path):
                                   headless=headless,
                                   concurrency=concurrency,
                                   selector=selector,
-                                  bin_path=bin_path)
+                                  bin_path=bin_path,
+                                  chrome_args=chrome_args)
     print(json.dumps(results, indent=4))
 
 
@@ -157,14 +207,28 @@ def test_from_file(json_file, url, headless, concurrency, selector, bin_path):
 @click.option('--bin-path',
               help='Path to chromium executuable',
               type=click.Path(exists=True))
-def get(test_url, headless, concurrency, limit, selector, source_num, geo, bin_path):
+@click.option('--chrome-args',
+              help='chromium args (comma separated)',
+              type=str)
+def get(test_url, headless, concurrency, limit, selector, source_num, geo, bin_path, chrome_args):
     """
     Get a working proxy
     """
+    chrome_args = chrome_args.split(',')
+    _args = []
+    for arg in chrome_args:
+        if not arg.startswith('--'):
+            arg = '--{}'.format(arg)
+            _args.append(arg)
     client = proxytools.Client()
-    results = client.get_proxies(test_url, headless=headless,
-                                 concurrency=concurrency, limit=limit,
-                                 selector=selector, source_num=source_num, bin_path=bin_path)
+    results = client.get_proxies(test_url,
+                                 headless=headless,
+                                 concurrency=concurrency,
+                                 limit=limit,
+                                 selector=selector,
+                                 source_num=source_num,
+                                 bin_path=bin_path,
+                                 chrome_args=chrome_args)
     if geo:
         wait = 1  #  seconds between WHOIS request
         for result in results:
