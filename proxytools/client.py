@@ -15,6 +15,7 @@ import time
 import yarl
 # Proxytools
 from .page import Page
+from .proxy import Proxy
 
 # Module vars
 _logger = logging.getLogger(__name__)
@@ -539,3 +540,20 @@ class Client:
                                     chrome_args=chrome_args)
         proxies = [r for r in results if r['status'] == 'OK']
         return proxies[0:limit]
+
+    def get_geography(self, proxies):
+        """
+        Get geographic location of `proxies`.
+
+        :param proxies: list of proxy URLs
+        :type proxies: list
+        :returns: dict
+        """
+        results = {}
+        for p in proxies:
+            proxy = Proxy.from_string(p)
+            country = proxy.country()
+            results[p] = country
+            time.sleep(1)
+
+        return results
