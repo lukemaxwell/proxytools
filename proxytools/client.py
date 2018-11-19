@@ -25,6 +25,9 @@ class TaskTimeout(Exception):
     """ Task Timeout Exception """
     pass
 
+class TaskError(Exception):
+    """ Generic Task Exception """
+    pass
 
 class ProxyToolError(Exception):
     """
@@ -330,13 +333,21 @@ class Client:
         except asyncio.TimeoutError:
             _logger.warning('Timed out fetching: {}'.format(str(url)))
             raise TaskTimeout('Navigation timed out')
+        except Exception as e:
+            raise TaskError(str(e))
 
         # Handle cloudlflare
         html = await resp.text()
         if self.detect_cloudflare(html):
             _logger.info('Cloudflare detected - awaiting navigation')
             await asyncio.sleep(12)
-            resp = await tab.reload()
+            try:
+                resp = await asyncio.wait_for(tab.reload(), timeout=timeout)
+            except asyncio.TimeoutError:
+                _logger.warning('Timed out fetching: {}'.format(str(url)))
+                raise TaskTimeout('Navigation timed out')
+            except Exception as e:
+                raise TaskError(str(e))
 
         _logger.info('Got {}'.format(str(url)))
         if selector:
