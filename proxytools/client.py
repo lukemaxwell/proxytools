@@ -74,19 +74,19 @@ class Client:
         else:
             return False
 
-    async def _async_get_pages(self, urls, concurrency=10, headless=True,
+    async def _async_get_pages(self, urls, tab_concurrency=10, headless=True,
                                timeout=10, bin_path=None, chrome_args=[]):
         """
         Asynchronously get pages from `urls` using chromium.
 
         :param urls: URLs to get
-        :param concurrency: number of concurrent chromium tabs to utilise
+        :param tab_concurrency: max concurrent chromium tabs
         :param headless: use chrome in headless mode
         :param bin_path: path to chrome executable
         :param chrome_args: headless chrome args
 
         :type urls: list
-        :type concurrency: int
+        :type tab_concurrency: int
         :type headless: bool
         :type bin_path: str
         :type chrome_args: list
@@ -104,7 +104,7 @@ class Client:
         pages = []
         # Create incognito tab
         context = await browser.createIncognitoBrowserContext()
-        for chunk in self._chunker(urls, concurrency):
+        for chunk in self._chunker(urls, tab_concurrency):
             new_pages = await asyncio.gather(
                 *[self.get_page(url, context, timeout=timeout) for url in chunk if url],
                 return_exceptions=True)
@@ -249,7 +249,7 @@ class Client:
                                   url,
                                   headless=True,
                                   timeout=10,
-                                  concurrency=1,
+                                  browser_concurrency=1,
                                   exit_success_count=None,
                                   selector=None,
                                   bin_path=None,
@@ -261,7 +261,7 @@ class Client:
         :param url: the URL to test the proxies against
         :param headless: run chrome headless mode
         :param timeout: seconds to wait before quitting each test
-        :param concurrency: number of concurrent chromium tabs to utilise
+        :param browser_concurrency: max concurrent chromium tabs
         :param selector: css selector used to verify page load
         :param exit_success_count: exit when number of working proxies is reached
         :param bin_path: path to chrome executable
@@ -271,7 +271,7 @@ class Client:
         :type url: yarl.URL
         :type headless: bool
         :type timeout: int
-        :type concurrency: int
+        :type browser_concurrency: int
         :type selector: str
         :type exit_success_count: int
         :type bin_path: str
@@ -283,7 +283,7 @@ class Client:
         count = 0
         status_ok_count = 0
         start_ts = datetime.datetime.now()
-        for chunk in self._chunker(proxies, concurrency):
+        for chunk in self._chunker(proxies, browser_concurrency):
             n_results = await asyncio.gather(
                 *[self._async_test_proxy(
                     proxy, url, headless=headless,
@@ -361,7 +361,7 @@ class Client:
         page = Page(url=url, html=html)
         return page
 
-    def get_pages(self, urls, timeout=10, headless=True, bin_path=None, chrome_args=[]):
+    def get_pages(self, urls, timeout=10, tab_concurrency=10, headless=True, bin_path=None, chrome_args=[]):
         """
         Get pages from `urls` using chromium browser.
 
@@ -371,10 +371,12 @@ class Client:
         :param urls: list of URL strings
         :param bin_path: path to chrome executable
         :param chrome_args: headless chromium args
+        :param tab_concurrency: max concurrent chromium tabs
 
         :type urls: list
         :type bin_path: str
         :type chrome_args: list
+        :type tab_concurrency: int
 
         :type urls: list
         :type bin_path: str
@@ -388,6 +390,7 @@ class Client:
                                   timeout=timeout,
                                   headless=headless,
                                   bin_path=bin_path,
+                                  tab_concurrency=tab_concurrency,
                                   chrome_args=chrome_args))
         pages = []
         for result in results:
@@ -418,7 +421,7 @@ class Client:
         return self.loop.run_until_complete(
             self._async_get_source_urls(headless=headless, num=num, bin_path=bin_path, chrome_args=chrome_args))
 
-    def get_pages_with_proxies(self, source_num=10, headless=True, bin_path=None, chrome_args=[]):
+    def get_pages_with_proxies(self, source_num=10, headless=True, tab_concurrency=10, bin_path=None, chrome_args=[]):
         """
         Scrape the web for pages containing proxies.
 
@@ -426,23 +429,25 @@ class Client:
         :param headless: run chrome headless mode
         :param bin_path: path to chrome executable
         :param chrome_args: headless chromium args
+        :param tab_concurrency: max concurrent chromium tabs
 
         :type source_num: int
         :type headless: bool
         :type bin_path: str
         :type chrome_args: list
+        :type tab_concurrency: int
 
         :returns: list
         """
         urls = self.get_source_urls(num=source_num, headless=headless, bin_path=bin_path, chrome_args=chrome_args)
         _logger.info('Found {} source URLs'.format(len(urls)))
-        pages = self.get_pages(urls, headless=headless, bin_path=bin_path, chrome_args=chrome_args)
+        pages = self.get_pages(urls, headless=headless, tab_concurrency=tab_concurrency, bin_path=bin_path, chrome_args=chrome_args)
         _logger.info('Downloaded {} pages'.format(len(pages)))
         proxy_pages = [page for page in pages if page.contains_ips()]
         _logger.info('Found {} pages containing proxies'.format(len(pages)))
         return proxy_pages
 
-    def search_proxies(self, source_num=10, headless=True, bin_path=None, chrome_args=[]):
+    def search_proxies(self, source_num=10, tab_concurrency=10, headless=True, bin_path=None, chrome_args=[]):
         """
         Scrape the web for proxies.
 
@@ -450,17 +455,20 @@ class Client:
         :param headless: run chrome headless mode
         :param bin_path: path to chrome executable
         :param chrome_args: headless chromium args
+        :param tab_concurrency: max concurrent chromium tabs
 
         :type source_num: int
         :type headless: bool
         :type bin_path: str
         :type chrome_args: list
+        :type tab_concurrency: int
 
         :returns: list
         """
         proxies = []
         proxy_pages = self.get_pages_with_proxies(source_num=source_num,
                                                   headless=headless,
+                                                  tab_concurrency=tab_concurrency,
                                                   bin_path=bin_path,
                                                   chrome_args=chrome_args)
         for page in proxy_pages:
@@ -469,7 +477,7 @@ class Client:
         return proxies
 
     def test_proxies(self, proxies, url, timeout=10,
-                     selector=None, headless=True, concurrency=2,
+                     selector=None, headless=True, browser_concurrency=2,
                      exit_success_count=None, bin_path=None, chrome_args=[]):
         """
         Test proxies can load page at `url`.
@@ -478,7 +486,7 @@ class Client:
         :param url: the URL to test the proxies against
         :param headless: run chrome headless mode
         :param timeout: seconds to wait before quitting each test
-        :param concurrency: number of concurrent chromium tabs to utilise
+        :param browser_concurrency: max concurrent chromium browsers
         :param selector: css selector used to verify page load
         :param exit_success_count: exit when number of working proxies is reached
         :param bin_path: path to chrome executable
@@ -488,7 +496,7 @@ class Client:
         :type url: yarl.URL
         :type headless: bool
         :type timeout: int
-        :type concurrency: int
+        :type browser_concurrency: int
         :type selector: str
         :type exit_success_count: int
         :type bin_path: str
@@ -500,7 +508,7 @@ class Client:
             self._async_test_proxies(proxies,
                                      url,
                                      timeout=timeout,
-                                     concurrency=concurrency,
+                                     browser_concurrency=browser_concurrency,
                                      selector=selector,
                                      exit_success_count=exit_success_count,
                                      headless=headless,
@@ -508,8 +516,9 @@ class Client:
                                      chrome_args=chrome_args))
 
     def get_proxies(self, test_url, limit=10, timeout=10,
-                    selector=None, headless=True, concurrency=2,
-                    source_num=10, bin_path=None, chrome_args=[]):
+                    selector=None, headless=True, browser_concurrency=2,
+                    tab_concurrency=10, source_num=10,
+                    bin_path=None, chrome_args=[]):
         """
         Scrape the web for working proxies.
         Test proxies can load `test_url`.
@@ -518,7 +527,8 @@ class Client:
         :param test_url: the URL to test the proxies against
         :param headless: run chrome headless mode
         :param timeout: seconds to wait before quitting each test
-        :param concurrency: number of concurrent chromium tabs to utilise
+        :param browser_concurrency: max number of concurrent chromium browsers
+        :param tab_concurrency: max number of concurrent chromium tabs
         :param selector: css selector used to verify proxy is working
         :param source_num: number of proxy sources to get from Google
         :param bin_path: path to chrome executable
@@ -528,7 +538,8 @@ class Client:
         :type test_url: yarl.URL
         :type headless: bool
         :type timeout: int
-        :type concurrency: int
+        :type browser_concurrency: int
+        :type tab_concurrency: int
         :type selector: str
         :type source_num: int
         :type bin_path: str
@@ -538,13 +549,14 @@ class Client:
         """
         proxies = self.search_proxies(source_num=source_num,
                                       headless=headless,
+                                      tab_concurrency=tab_concurrency,
                                       bin_path=bin_path,
                                       chrome_args=chrome_args)
 
         results = self.test_proxies(proxies,
                                     test_url,
                                     headless=headless,
-                                    concurrency=concurrency,
+                                    browser_concurrency=browser_concurrency,
                                     selector=selector,
                                     exit_success_count=limit,
                                     bin_path=bin_path,
