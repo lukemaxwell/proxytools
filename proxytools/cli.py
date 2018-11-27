@@ -144,7 +144,7 @@ def search(source_num, bin_path, chrome_args):
 @click.argument('proxy', type=click.STRING)
 @click.argument('url', type=click.STRING)
 @click.option('--headless/--no-headless', default=True)
-@click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
+@click.option('--browser-concurrency',  help='number of concurrent browser sessions', default=1)
 @click.option('--selector', '-s',  help='css selector for page validation')
 @click.option('--bin-path',
               help='Path to chromium executuable',
@@ -153,7 +153,7 @@ def search(source_num, bin_path, chrome_args):
               help='chromium args (comma separated)',
               type=str,
               default='')
-def test(proxy, url, headless, concurrency, selector, bin_path, chrome_args):
+def test(proxy, url, headless, browser_concurrency, selector, bin_path, chrome_args):
     """
     Test a proxy for a given URL
     """
@@ -165,7 +165,7 @@ def test(proxy, url, headless, concurrency, selector, bin_path, chrome_args):
                 arg = '--{}'.format(arg)
             _args.append(arg)
     client = proxytools.Client()
-    results = client.test_proxies([proxy], url, headless=headless, concurrency=concurrency, selector=selector)
+    results = client.test_proxies([proxy], url, headless=headless, browser_concurrency=browser_concurrency, selector=selector)
     print(json.dumps(results, indent=4))
 
 
@@ -173,7 +173,7 @@ def test(proxy, url, headless, concurrency, selector, bin_path, chrome_args):
 @click.argument('json-file', type=click.File('r'))
 @click.argument('url', type=click.STRING)
 @click.option('--headless/--no-headless', default=True)
-@click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
+@click.option('--browser-concurrency',  help='number of concurrent browser sessions', default=1)
 @click.option('--selector', '-s',  help='css selector for page validation')
 @click.option('--bin-path',
               help='Path to chromium executuable',
@@ -182,7 +182,7 @@ def test(proxy, url, headless, concurrency, selector, bin_path, chrome_args):
               help='chromium args (comma separated)',
               type=str,
               default='')
-def test_from_file(json_file, url, headless, concurrency, selector, bin_path, chrome_args):
+def test_from_file(json_file, url, headless, browser_concurrency, selector, bin_path, chrome_args):
     """
     Test proxies from json file for a given URL
     """
@@ -198,7 +198,7 @@ def test_from_file(json_file, url, headless, concurrency, selector, bin_path, ch
     results = client.test_proxies(proxies,
                                   url,
                                   headless=headless,
-                                  concurrency=concurrency,
+                                  browser_concurrency=browser_concurrency,
                                   selector=selector,
                                   bin_path=bin_path,
                                   chrome_args=chrome_args)
@@ -208,7 +208,8 @@ def test_from_file(json_file, url, headless, concurrency, selector, bin_path, ch
 @cli.command()
 @click.argument('test-url', type=click.STRING)
 @click.option('--headless/--no-headless', default=True)
-@click.option('--concurrency', '-c',  help='number of concurrent browser sessions', default=1)
+@click.option('--tab-concurrency',  help='number of concurrent browser tabs', default=1)
+@click.option('--browser-concurrency',  help='number of concurrent browser sessions', default=1)
 @click.option('--geo', '-g', help='perform whois country lookup for proxies', is_flag=True)
 @click.option('--limit', '-l',  help='number of proxies to get', default=1)
 @click.option('--selector', '-s',  help='css selector for page validation')
@@ -221,7 +222,7 @@ def test_from_file(json_file, url, headless, concurrency, selector, bin_path, ch
               help='chromium args (comma separated)',
               type=str,
               default='')
-def get(test_url, headless, concurrency, limit, selector, source_num, geo, bin_path, chrome_args):
+def get(test_url, headless, tab_concurrency, browser_concurrency, limit, selector, source_num, geo, bin_path, chrome_args):
     """
     Get a working proxy
     """
@@ -235,7 +236,8 @@ def get(test_url, headless, concurrency, limit, selector, source_num, geo, bin_p
     client = proxytools.Client()
     results = client.get_proxies(test_url,
                                  headless=headless,
-                                 concurrency=concurrency,
+                                 tab_concurrency=tab_concurrency,
+                                 browser_concurrency=browser_concurrency,
                                  limit=limit,
                                  selector=selector,
                                  source_num=source_num,
