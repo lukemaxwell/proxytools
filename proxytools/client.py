@@ -338,16 +338,18 @@ class Client:
 
         # Handle cloudlflare
         html = await resp.text()
-        if self.detect_cloudflare(html):
-            _logger.info('Cloudflare detected - awaiting navigation')
-            await asyncio.sleep(12)
-            try:
-                resp = await asyncio.wait_for(tab.reload(), timeout=timeout)
-            except asyncio.TimeoutError:
-                _logger.warning('Timed out fetching: {}'.format(str(url)))
-                raise TaskTimeout('Navigation timed out')
-            except Exception as e:
-                raise TaskError(str(e))
+
+        # Needs work
+        # if self.detect_cloudflare(html):
+        #     _logger.info('Cloudflare detected - awaiting navigation')
+        #     await asyncio.sleep(12)
+        #     try:
+        #         resp = await asyncio.wait_for(tab.reload(), timeout=timeout)
+        #     except asyncio.TimeoutError:
+        #         _logger.warning('Timed out fetching: {}'.format(str(url)))
+        #         raise TaskTimeout('Navigation timed out')
+        #     except Exception as e:
+        #         raise TaskError(str(e))
 
         _logger.info('Got {}'.format(str(url)))
         if selector:
