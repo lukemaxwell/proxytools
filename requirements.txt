@@ -4,7 +4,7 @@ click
 html5lib
 inscriptis
 lxml
+numpy
 pandas
 pyppeteer
-requirements
 yarl

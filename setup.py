@@ -28,6 +28,7 @@ setup(
         'html5lib', # required for pandas.read_html
         'inscriptis',
         'lxml',
+        'numpy',
         'pandas',
         'pyppeteer',
         'requests',
