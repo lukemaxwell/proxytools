@@ -42,10 +42,12 @@ class Client:
 
     The is the main entry point for proxytools.
     """
-    def __init__(self):
+    def __init__(self, debug=False):
         self.loop = asyncio.get_event_loop()
         self.geoip_url = yarl.URL('http://ip-api.com/json/')
         self.whois_server = 'whois.apnic.net'
+        self.debug = debug
+        self.loop.set_debug(self.debug)
 
     def _chunker(self, iterable, n, fillvalue=None):
         """

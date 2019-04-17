@@ -213,6 +213,7 @@ def test_from_file(json_file, url, headless, browser_concurrency, selector, bin_
 @click.option('--geo', '-g', help='perform whois country lookup for proxies', is_flag=True)
 @click.option('--limit', '-l',  help='number of proxies to get', default=1)
 @click.option('--selector', '-s',  help='css selector for page validation')
+@click.option('--debug', '-d', help='debug output for crawler', is_flag=True)
 @click.option('--source-num', '-n',  help='number of sources to get from Google [1-100]',
               default=10)
 @click.option('--bin-path',
@@ -222,7 +223,7 @@ def test_from_file(json_file, url, headless, browser_concurrency, selector, bin_
               help='chromium args (comma separated)',
               type=str,
               default='')
-def get(test_url, headless, tab_concurrency, browser_concurrency, limit, selector, source_num, geo, bin_path, chrome_args):
+def get(test_url, headless, tab_concurrency, browser_concurrency, limit, selector, source_num, geo, bin_path, chrome_args, debug):
     """
     Get a working proxy
     """
@@ -233,7 +234,7 @@ def get(test_url, headless, tab_concurrency, browser_concurrency, limit, selecto
             if not arg.startswith('--'):
                 arg = '--{}'.format(arg)
             _args.append(arg)
-    client = proxytools.Client()
+    client = proxytools.Client(debug=True)
     results = client.get_proxies(test_url,
                                  headless=headless,
                                  tab_concurrency=tab_concurrency,
